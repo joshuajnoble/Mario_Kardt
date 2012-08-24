@@ -7,15 +7,119 @@
   <body>
     <h1><%= title %></h1>
     <p>Welcome to <%= title %></p>
+
+    <fieldset class="gas" data-width="50" data-cols="1" data-min="-100" data-max="100" data-mid="0" data-fgColor="#ff0000">
+      <input value="10">
+    </fieldset>
+
+    <!-- <input class="dial" value="50" data-min="-50" data-max="50"> -->
+    <input class="knob" data-cursor="true" data-fgColor="#222222" data-thickness=".3" data-min="-250" data-max="250" data-angleArc="220" data-angleOffset="-110" value="0">
+
+    <!-- <fieldset class="bars1" data-width="720" data-cols="16" data-min="-100" data-max="100">
+        <legend>16 tracks</legend>
+        <input value="90">
+        <input value="40">
+        <input value="-10">
+        <input value="-10">
+        <input value="-20">
+        <input value="-20">
+        <input value="-20">
+        <input value="-100">
+        <input value="-100">
+        <input value="-20">
+        <input value="-20">
+        <input value="-20">
+        <input value="-10">
+        <input value="-10">
+        <input value="40">
+        <input value="90">
+    </fieldset> -->
+
     <div id="output"></div>
     <script src="/socket.io/socket.io.js"></script>
-	<script>
-	  var socket = io.connect('http://localhost');
-	  socket.on('news', function (data) {
-	    console.log(data);
-	    socket.emit('my other event', { my: 'data' });
-	  });
-	</script>
+  	<script>
+  	  var socket = io.connect('http://localhost');
+  	  socket.on('news', function (data) {
+  	    console.log(data);
+  	    socket.emit('my other event', { my: 'data' });
+  	  });
+  	</script>
+    <script src="/javascripts/libs/jquery-1.8.0.min.js" type="text/javascript"></script>
+    <script src="/javascripts/libs/jquery.kontrol.js" type="text/javascript"></script>
+    <script src="/javascripts/libs/jquery.knob.js" type="text/javascript"></script>
     <script src="/javascripts/accelerometer.js" type="text/javascript"></script>
+    <script type="text/javascript">
+      $(function () {
+        $(".gas").bars({
+            fgColor:"#222222"
+          , bgColor:"#00ff00"
+          , displayMidLine: true
+        });
+        // $(".dial").knob({
+        //     // angleArc: 220
+        //   // , angleOffset: -110
+        //   thickness: .3
+        //   , cursor: true
+        // });
+        // $(".bars1").bars({
+        //     fgColor:"#222222"
+        //   , bgColor:"#EEEEEE"
+        // });
+      $(".knob").knob({
+                    /*change : function (value) {
+                        //console.log("change : " + value);
+                    },
+                    release : function (value) {
+                        console.log("release : " + value);
+                    },
+                    cancel : function () {
+                        console.log("cancel : " + this.value);
+                    },*/
+                    // draw : function () {
+
+                    //     // "tron" case
+                    //     if(this.$.data('skin') == 'tron') {
+
+                    //         var a = this.angle(this.cv)  // Angle
+                    //             , sa = this.startAngle          // Previous start angle
+                    //             , sat = this.startAngle         // Start angle
+                    //             , ea                            // Previous end angle
+                    //             , eat = sat + a                 // End angle
+                    //             , r = 1;
+
+                    //         this.g.lineWidth = this.lineWidth;
+
+                    //         this.o.cursor
+                    //             && (sat = eat - 0.3)
+                    //             && (eat = eat + 0.3);
+
+                    //         if (this.o.displayPrevious) {
+                    //             ea = this.startAngle + this.angle(this.v);
+                    //             this.o.cursor
+                    //                 && (sa = ea - 0.3)
+                    //                 && (ea = ea + 0.3);
+                    //             this.g.beginPath();
+                    //             this.g.strokeStyle = this.pColor;
+                    //             this.g.arc(this.xy, this.xy, this.radius - this.lineWidth, sa, ea, false);
+                    //             this.g.stroke();
+                    //         }
+
+                    //         this.g.beginPath();
+                    //         this.g.strokeStyle = r ? this.o.fgColor : this.fgColor ;
+                    //         this.g.arc(this.xy, this.xy, this.radius - this.lineWidth, sat, eat, false);
+                    //         this.g.stroke();
+
+                    //         this.g.lineWidth = 2;
+                    //         this.g.beginPath();
+                    //         this.g.strokeStyle = this.o.fgColor;
+                    //         this.g.arc( this.xy, this.xy, this.radius - this.lineWidth + 1 + this.lineWidth * 2 / 3, 0, 2 * Math.PI, false);
+                    //         this.g.stroke();
+
+                    //         return false;
+                    //     }
+                    // }
+                });
+      });
+    </script>
   </body>
 </html>
