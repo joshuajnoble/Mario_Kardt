@@ -60,7 +60,6 @@
 
 #include <SoftwareSerial.h> // need this to talk to the wifly shield.
 #include <WiFlyHQ.h> // wifly!
-#include <ADJDS311.h> // include for the color sensot
 #include <Wire.h> // i2c library to talk to the color sensor
 
 // ADJD-S311 Pin definitions:
@@ -86,20 +85,45 @@ SoftwareSerial wifiSerial(10,11);
 
 // Change these to match your WiFi network
 const char mySSID[] = "hoembaes";
-const char myPassword[] = "tigerstyle";
+const char myPassword[] = "";
 
 uint32_t lastSend = 0;
 uint32_t count=0;
 
+const int PORT = 8042;
+const char IP[] = "192.168.1.60";
+
 // this is the data packet
 // transmitted like so:
 // xx.xxx.xx.xxx:3000?id=THIS_ID&color=colorSensorVal
+// xx.xxx.xx.xxx:3000?id=THIS_ID&color=1
 int THIS_ID;
 int colorSensorVal;
 
 void terminal();
 WiFly wifly;
 
+//////////////////////////////////////////////////////////////////
+// COLORS
+//////////////////////////////////////////////////////////////////
+
+const int blue[] = { 884, 824, 607, 541 };
+const int red[] = { 1000, 655, 427, 534 };
+const int yellow[] = { 1023, 860, 524, 617 };
+const int orange[] = { 1023, 744, 440, 635 };
+const int green[] = { 938, 825, 427, 564 };
+const int magenta[] = { 895, 573, 403, 482 };
+const int greenLined[] = { 741, 683, 392, 487 };
+
+const int *colors[] = { blue, red, yellow, orange, green, magenta, greenLined };
+
+
+//////////////////////////////////////////////////////////////////
+// GAME LOGIC
+//////////////////////////////////////////////////////////////////
+
+bool lastReqResponded = false;
+uint16_t left, right;
 
 void setup()
 {
@@ -119,6 +143,7 @@ void setup()
 
   /////////////////////////////////////////////////////
   // WIFLY
+  /////////////////////////////////////////////////////
 
   wifiSerial.begin(9600);
 
@@ -134,7 +159,7 @@ void setup()
     wifly.reboot();
   }
 
-  /* Join wifi network if not already associated */
+  // Join wifi network if not already associated
   if (!wifly.isAssociated()) {
     /* Setup the WiFly to connect to a wifi network */
     //Serial.println("Joining network");
@@ -165,13 +190,9 @@ void setup()
 
   // Setup for UDP packets, sent automatically
   wifly.setIpProtocol(WIFLY_PROTOCOL_UDP);
-  wifly.setHost("192.168.1.60", 8042);	// Send UDP packet to this server and port
-
+  // do we need device ID before setHost()?
+  wifly.setHost(IP, PORT);	// Send UDP packet to this server and port
   wifly.setDeviceID("Wifly-UDP");
-  //Serial.print("DeviceID: ");
-  //Serial.println(wifly.getDeviceID(buf, sizeof(buf)));
-
-  wifly.setHost("192.168.1.60", 8042);	// Send UPD packets to this server and port
 
   ////////////////////////////////////////////////////
   // COLOR SENSOR
@@ -180,9 +201,7 @@ void setup()
   digitalWrite(ledPin, HIGH);  // Initially turn LED light source on
   
   Serial.begin(9600);
-  
   Serial.println( "begin wire ");
-  
   Wire.begin();
   Serial.println( "wire begun ");
   
@@ -200,15 +219,108 @@ void setup()
 //
 void loop()
 {
+  // check wifly
+  if(!hasGottenIDFromServer) {
+    wifly.println("idRequest");
+    
+    // just wait for this
+    while( wifly.available() < 0 ) {
+    }
+    
+    THIS_ID = wifly.read();
+    hasGottenIDFromServer = true;
+    
+  } else {
+    
+    // check the ADJD
+    getRGBC();
+    
+    int color = checkColors();
+    
+    if( color != -1 && !lastReqResponded ) {
+      wifly.print(THIS_ID);
+      wifly.print(',');
+      wifly.println(color);
+      lastReqResponded = false;
+    } else if( !lastReqResponded ) {
+      wifly.print(THIS_ID);
+      lastReqResponded = false;
+    }
+    
+    char t[3];
+    memset(t, 0x20, 3);
+    
+    int ind;
+    
+    // wait for all 7 chars
+    if(wifly.available() > 7) {
+      lastReqResponded = true;
 
-  // check the ADJD
-  getRGBC();
-
-
+      boolean leading = true;
+      int i = 0;
+      while( i < 3 ) {
+        char c = (char) wifly.read();
+        if(c != '0'){
+          leading = false;
+        }
+        if(!leading) {
+          t[i] = c;
+        }
+        i++;
+      }
+      char sep = wifly.read(); // throw away
+      
+      left = (int) strtol(&t[0], NULL, 0);
+      leading = true;
+      
+      int i = 0;
+      while( i < 3 ) {
+        char c = (char) wifly.read();
+        if(c != '0'){
+          leading = false;
+        }
+        if(!leading) {
+          t[i] = c;
+        }
+        i++;
+      }
+      
+      right = (int) strtol(&t[0], NULL, 0);
+    }
+    
+    //void motor_control(char motor, char direction, unsigned char speed)
+    if(left > 255) {
+      motor_control( MOTOR_A, FORWARD, left - 255);
+    } else {
+      motor_control( MOTOR_A, BACKWARD, 255 - left);
+    }
+    
+    if(right > 255) {
+      motor_control( MOTOR_B, FORWARD, right - 255);
+    } else {
+      motor_control( MOTOR_B, BACKWARD, 255 - right);
+    }
+    
+  }
 }
 
-void turn()
+int checkColors()
 {
+  
+  // find the color we need
+  for( int i = 0; i < 6; i++) {
+    if( abs(colors[i][0] - COLORS[RED] ) < 20 ) {
+      if( abs(colors[i][1] - COLORS[GREEN] ) < 20 ) {
+        if( abs(colors[i][2] - COLORS[BLUE] ) < 20 ) {
+          if( abs(colors[i][3] - COLORS[CLEAR] ) < 20 ) {
+            return index;
+          }
+        }
+      }
+    }
+  }
+  
+  return -1;
 }
 
 //////////////////////////////////////////////////////////////////
@@ -321,7 +433,6 @@ void motor_control(char motor, char direction, unsigned char speed)
 
 void initADJD_S311()
 { 
-  Serial.println(" initADJD_S311 ");
   
   /*sensor gain registers, CAP_...
   to select number of capacitors.
