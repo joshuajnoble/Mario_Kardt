@@ -38,8 +38,30 @@ var server = http.createServer(app).listen(app.get('port'), function(){
 
 // SOCKET CODE
 
-var io = sio.listen(server);
+var io = sio.listen(server),
+    carts = {};
 
 io.sockets.on('connection', function (socket) {
   console.log(socket.id);
+
+  carts[socket.id] = {
+    left: 255,
+    right: 255
+  };
+
+  socket.on('left', function (data) {
+    carts[socket.id].left = data;
+    console.log(carts[socket.id]);
+  });
+
+  socket.on('right', function (data) {
+    carts[socket.id].right = data;
+    console.log(carts[socket.id]);
+  });
+
+  socket.on('disconnect', function () {
+    console.log('disconnect = ' + socket.id);
+    delete carts[socket.id];
+  });
+
 });
