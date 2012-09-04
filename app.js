@@ -29,7 +29,30 @@ app.configure('development', function(){
   app.use(express.errorHandler());
 });
 
-app.get('/', routes.index);
+var cartClients = {};
+var lastIndex = 0;
+//app.get('/', routes.index);
+app.get('/play', function(req, res) {
+
+   var url_parts = url.parse(request.url, true);
+   var query = url_parts.query;
+
+   res.setHeader("Content-Type", "text/html");
+   res.write(carts[cartClients[query.id]]);
+   res.end();
+
+});
+
+app.get('/id', function(req,res) {
+
+   if(!cartClient[lastIndex]) {
+       cartClient[lastIndex] = carts[lastIndex]; 
+   }
+   res.setHeader("Content-Type", "text/html");
+   res.write(lastIndex);
+   res.end();
+   lastIndex++;
+});
 
 // create server
 var server = http.createServer(app).listen(app.get('port'), function(){
