@@ -221,7 +221,7 @@ void loop()
 {
   // check wifly
   if(!hasGottenIDFromServer) {
-    wifly.println("idRequest");
+    wifly.println("GET /id");
     
     // just wait for this
     while( wifly.available() < 0 ) {
@@ -238,11 +238,14 @@ void loop()
     int color = checkColors();
     
     if( color != -1 && !lastReqResponded ) {
+      wifly.print("GET /play?id=");
       wifly.print(THIS_ID);
-      wifly.print(',');
+      wifly.print('&color=');
       wifly.println(color);
       lastReqResponded = false;
     } else if( !lastReqResponded ) {
+      
+      wifly.print("GET /play?id=");
       wifly.print(THIS_ID);
       lastReqResponded = false;
     }

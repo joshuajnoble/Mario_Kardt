@@ -31,12 +31,43 @@ app.configure('development', function(){
 
 var cartClients = {};
 var lastIndex = 0;
+var currentGameModifier = {}; // what modifier it is, and who did it.
+
 //app.get('/', routes.index);
 app.get('/play', function(req, res) {
 
    var url_parts = url.parse(request.url, true);
    var query = url_parts.query;
 
+// we have a color!
+   if(query['color']) {
+      currentGameModifier['event'] = query.color;
+      currentGameModifier['source'] = query.id;
+   } else {
+      switch(currentGameModifier['event']) {
+	case 0:
+// nada, normal game play
+	break;
+	case 1:
+// if we're not the one who sent it, then it affects us
+	if(currentGameModifier != query.id) {
+
+	    carts[cartClients[query.id]].left = 10; // slow down, for example
+	    carts[cartClients[query.id]].right = 10; // slow down, for example
+	}
+	break;
+	case 2:
+	break;
+	case 3:
+	break;
+	case 4
+	break;
+	case 5:
+	break;
+	case 6:
+	break;
+      }
+   }
    res.setHeader("Content-Type", "text/html");
    res.write(carts[cartClients[query.id]]);
    res.end();
