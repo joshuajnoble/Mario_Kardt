@@ -45,27 +45,52 @@ app.get('/play', function(req, res) {
       currentGameModifier['source'] = query.id;
    } else {
       switch(currentGameModifier['event']) {
-	case 0:
-// nada, normal game play
-	break;
-	case 1:
-// if we're not the one who sent it, then it affects us
-	if(currentGameModifier != query.id) {
+      	case 0:
+      // nada, normal game play
+      	break;
+      	case 1:
+      // if we're not the one who sent it, then it affects us
+      	if(currentGameModifier != query.id) {
 
-	    carts[cartClients[query.id]].left = 10; // slow down, for example
-	    carts[cartClients[query.id]].right = 10; // slow down, for example
-	}
-	break;
-	case 2:
-	break;
-	case 3:
-	break;
-	case 4
-	break;
-	case 5:
-	break;
-	case 6:
-	break;
+      	    carts[cartClients[query.id]].left = 10; // slow down, for example
+      	    carts[cartClients[query.id]].right = 10; // slow down, for example
+      	}
+      	break;
+
+      	case 2:
+        if(currentGameModifier == query.id) {
+
+            // how to do faster
+        }
+      	break;
+      	case 3:
+        // make everybody else do a loop
+        if(currentGameModifier != query.id) {
+
+            carts[cartClients[query.id]].left = 255; // slow down, for example
+            carts[cartClients[query.id]].right = -255; // slow down, for example
+        }
+      	break;
+      	case 4:
+        // make everybody else skew left
+        if(currentGameModifier != query.id) {
+          //
+        }
+      	break;
+      	case 5:
+        // make everybody else skew right?
+        if(currentGameModifier != query.id) {
+          //
+        }
+      	break;
+      	case 6:
+        // one more thing?
+        if(currentGameModifier != query.id) {
+          //
+        }
+      	break;
+        default:
+        break;
       }
    }
    res.setHeader("Content-Type", "text/html");
