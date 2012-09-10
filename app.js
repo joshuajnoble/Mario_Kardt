@@ -31,7 +31,7 @@ app.configure('development', function(){
 
 var cartClients = {};
 var lastIndex = 0;
-var currentGameModifier = {}; // what modifier it is, and who did it.
+var currentGameState = {}; // what modifier it is, and who did it
 
 //app.get('/', routes.index);
 app.get('/play', function(req, res) {
@@ -41,16 +41,21 @@ app.get('/play', function(req, res) {
 
 // we have a color!
    if(query['color']) {
-      currentGameModifier['event'] = query.color;
-      currentGameModifier['source'] = query.id;
+      currentGameState['event'] = query.color;
+      currentGameState['source'] = query.id;
+
+      setTimeout( function() {
+          currentGameState = {};
+      }, 2000); // 2 seconds of madness?
+
    } else {
-      switch(currentGameModifier['event']) {
+      switch(currentGameState['event']) {
       	case 0:
       // nada, normal game play
       	break;
       	case 1:
       // if we're not the one who sent it, then it affects us
-      	if(currentGameModifier != query.id) {
+      	if(currentGameState != query.id) {
 
       	    carts[cartClients[query.id]].left = 10; // slow down, for example
       	    carts[cartClients[query.id]].right = 10; // slow down, for example
@@ -58,14 +63,14 @@ app.get('/play', function(req, res) {
       	break;
 
       	case 2:
-        if(currentGameModifier == query.id) {
+        if(currentGameState == query.id) {
 
             // how to do faster
         }
       	break;
       	case 3:
         // make everybody else do a loop
-        if(currentGameModifier != query.id) {
+        if(currentGameState != query.id) {
 
             carts[cartClients[query.id]].left = 255; // slow down, for example
             carts[cartClients[query.id]].right = -255; // slow down, for example
@@ -73,19 +78,19 @@ app.get('/play', function(req, res) {
       	break;
       	case 4:
         // make everybody else skew left
-        if(currentGameModifier != query.id) {
+        if(currentGameState != query.id) {
           //
         }
       	break;
       	case 5:
         // make everybody else skew right?
-        if(currentGameModifier != query.id) {
+        if(currentGameState != query.id) {
           //
         }
       	break;
       	case 6:
         // one more thing?
-        if(currentGameModifier != query.id) {
+        if(currentGameState != query.id) {
           //
         }
       	break;
