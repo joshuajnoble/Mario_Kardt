@@ -29,91 +29,169 @@ app.configure('development', function(){
   app.use(express.errorHandler());
 });
 
-var cartClients = {};
+var wiflyCarts = [];
+var controllers = [];
+var controllerCartJoint = [];
 var lastIndex = 0;
 var currentGameState = {}; // what modifier it is, and who did it
 
 //app.get('/', routes.index);
 app.get('/play', function(req, res) {
 
-   var url_parts = url.parse(request.url, true);
-   var query = url_parts.query;
+   //var url_parts = url.parse(req.url, true);
+   var query = req.query;
 
 // we have a color!
-   if(query['color']) {
+   /*if(query['color']) {
       currentGameState['event'] = query.color;
       currentGameState['source'] = query.id;
 
       setTimeout( function() {
-          currentGameState = {};
+          currentGameState = null;
       }, 2000); // 2 seconds of madness?
 
-   } else {
+   } 
+   else if(currentGameState) 
+   {
       switch(currentGameState['event']) {
       	case 0:
       // nada, normal game play
       	break;
       	case 1:
       // if we're not the one who sent it, then it affects us
-      	if(currentGameState != query.id) {
+      	if(currentGameState['source'] != query.id) {
 
-      	    carts[cartClients[query.id]].left = 10; // slow down, for example
-      	    carts[cartClients[query.id]].right = 10; // slow down, for example
+      	    carts[wiflyCarts[query.id]].left = 10; // slow down, for example
+      	    carts[wiflyCarts[query.id]].right = 10; // slow down, for example
       	}
       	break;
 
       	case 2:
-        if(currentGameState == query.id) {
+        if(currentGameState['source'] == query.id) {
 
             // how to do faster
         }
       	break;
       	case 3:
         // make everybody else do a loop
-        if(currentGameState != query.id) {
+        if(currentGameState['source'] != query.id) {
 
-            carts[cartClients[query.id]].left = 255; // slow down, for example
-            carts[cartClients[query.id]].right = -255; // slow down, for example
+            carts[wiflyCarts[query.id]].left = 255; // slow down, for example
+            carts[wiflyCarts[query.id]].right = -255; // slow down, for example
         }
       	break;
       	case 4:
         // make everybody else skew left
-        if(currentGameState != query.id) {
+        if(currentGameState['source'] != query.id) {
           //
         }
       	break;
       	case 5:
         // make everybody else skew right?
-        if(currentGameState != query.id) {
+        if(currentGameState['source'] != query.id) {
           //
         }
       	break;
       	case 6:
         // one more thing?
-        if(currentGameState != query.id) {
+        if(currentGameState['source'] != query.id) {
           //
         }
       	break;
         default:
         break;
       }
-   }
+   } else {
+*/
+    var currentController = null;
+    var left;
+    var right;
+    controllerCartJoint.forEach( function( obj, index, arr) {
+      if(obj.cart.id == query.id) {
+        currentController = obj.controller; 
+      }
+    });
+   //}
    res.setHeader("Content-Type", "text/html");
-   res.write(carts[cartClients[query.id]]);
+   if(currentController) {
+    
+    if(currentController.left < 10) {
+      left = "00" + currentController.left.toString();
+    } else if(currentController.left < 100) {
+      left = "0" + currentController.left.toString();
+    } else {
+      left = currentController.left.toString();
+    }
+
+    if(currentController.right < 10) {
+      left = "00" + currentController.right.toString();
+    } else if(currentController.right < 100) {
+      left = "0" + currentController.right.toString();
+    } else {
+      left = currentController.right.toString();
+    }
+    
+
+    res.write([left, right].join(":"));
+  } else {
+    res.write("122:122");
+  }
    res.end();
 
 });
+
+function encodeCartValue (val) {
+  val = val.toString();
+  if (val.length == ) {
+    val = "0" + val;
+  }
+  if (val.length == 1)
+}
 
 app.get('/id', function(req,res) {
 
-   if(!cartClient[lastIndex]) {
-       cartClient[lastIndex] = carts[lastIndex]; 
+   if(!wiflyCarts[lastIndex]) {
+
+      // strictly for testing
+      controllers["xyxyxyz"] = {
+        left: 255,
+        right: 255
+      };
+
+      controllers["xyxyxya"] = {
+        left: 122,
+        right: 122
+      };
+
+      /*var k = 0;
+      var foundKey;
+      for(var key in controllers) {
+        if(k == lastIndex) {
+          console.log(" found index " + k.toString() + " " + key);
+          foundKey = key;
+          break;
+        }
+        k++;
+      }
+      */
+      var newCart = {id:lastIndex};
+      wiflyCarts.push(newCart);
+      //console.log(lastIndex + " " + wiflyCarts[lastIndex]);
+
    }
    res.setHeader("Content-Type", "text/html");
-   res.write(lastIndex);
+   res.write(lastIndex.toString());
    res.end();
+
    lastIndex++;
+
 });
+
+function pairControllerToCart () {
+  if(controllerCartJoint.length < controllers.length && controllerCartJoint.length < wiflyCarts.length) {
+    controllerCartJoint.push( {contoller:controllers[controllers.length-1], cart:wiflyCarts[wiflyCarts.length-1]} );
+  }
+};
 
 // create server
 var server = http.createServer(app).listen(app.get('port'), function(){
@@ -122,30 +200,32 @@ var server = http.createServer(app).listen(app.get('port'), function(){
 
 // SOCKET CODE
 
-var io = sio.listen(server),
-    carts = {};
+var io = sio.listen(server);
 
 io.sockets.on('connection', function (socket) {
   console.log(socket.id);
 
-  carts[socket.id] = {
-    left: 255,
-    right: 255
-  };
+  var controller = {id:socket.id, left: 255, right: 255 };
+  controllers.push(controller);
+
+  pairControllerToCart();
 
   socket.on('left', function (data) {
-    carts[socket.id].left = data;
-    console.log(carts[socket.id]);
+
+    controller.left = data;
+    console.log(controllers[socket.id]);
   });
 
   socket.on('right', function (data) {
-    carts[socket.id].right = data;
-    console.log(carts[socket.id]);
+    controller.right = data;
+    console.log(controllers[socket.id]);
   });
 
   socket.on('disconnect', function () {
     console.log('disconnect = ' + socket.id);
-    delete carts[socket.id];
+    var controllerId = controllers.indexOf(controller);
+    delete controllers[controllerId];
+
   });
 
 });
