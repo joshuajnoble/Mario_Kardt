@@ -77,76 +77,57 @@ udpSocket.bind(8001);
 //app.get('/', routes.index);
 function updateGame() {
 
-   if(currentGameState) 
-   {
-      switch(currentGameState['event']) {
-      	case 0:
-      // nada, normal game play
-      	break;
-      	case 1:
-      // if we're not the one who sent it, then it affects us
-      	if(currentGameState['source'] != query.id) {
+  if(!currentGameState)
+    return;
 
-      	    carts[wiflyCarts[query.id]].left = 10; // slow down, for example
-      	    carts[wiflyCarts[query.id]].right = 10; // slow down, for example
-      	}
-      	break;
+  switch(currentGameState['event']) {
+  	case 0:
+  // nada, normal game play
+  	break;
+  	case 1:
+  // if we're not the one who sent it, then it affects us
+  	if(currentGameState['source'] != query.id) {
 
-      	case 2:
-        if(currentGameState['source'] == query.id) {
+  	    carts[wiflyCarts[query.id]].left = 10; // slow down, for example
+  	    carts[wiflyCarts[query.id]].right = 10; // slow down, for example
+  	}
+  	break;
 
-            // how to do faster
-        }
-      	break;
-      	case 3:
-        // make everybody else do a loop
-        if(currentGameState['source'] != query.id) {
+  	case 2:
+    if(currentGameState['source'] == query.id) {
 
-            carts[wiflyCarts[query.id]].left = 255; // slow down, for example
-            carts[wiflyCarts[query.id]].right = -255; // slow down, for example
-        }
-      	break;
-      	case 4:
-        // make everybody else skew left
-        if(currentGameState['source'] != query.id) {
-          //
-        }
-      	break;
-      	case 5:
-        // make everybody else skew right?
-        if(currentGameState['source'] != query.id) {
-          //
-        }
-      	break;
-      	case 6:
-        // one more thing?
-        if(currentGameState['source'] != query.id) {
-          //
-        }
-      	break;
-        default:
-        break;
-      }
-   }
+        // how to do faster
+    }
+  	break;
+  	case 3:
+    // make everybody else do a loop
+    if(currentGameState['source'] != query.id) {
 
-    /*var currentController = null;
-    var left;
-    var right;
-    controllerCartJoint.forEach( function( obj, index, arr) {
-      if(obj.cart.id == query.id) {
-        currentController = obj.controller; 
-      }
-    });
-   //}
-   res.setHeader("Content-Type", "text/html");
-   if(currentController) {
-  
-    res.write([left, right].join(":"));
-  } else {
-    res.write("122:122");
+        carts[wiflyCarts[query.id]].left = 255; // slow down, for example
+        carts[wiflyCarts[query.id]].right = -255; // slow down, for example
+    }
+  	break;
+  	case 4:
+    // make everybody else skew left
+    if(currentGameState['source'] != query.id) {
+      //
+    }
+  	break;
+  	case 5:
+    // make everybody else skew right?
+    if(currentGameState['source'] != query.id) {
+      //
+    }
+  	break;
+  	case 6:
+    // one more thing?
+    if(currentGameState['source'] != query.id) {
+      //
+    }
+  	break;
+    default:
+    break;
   }
-   res.end();*/
-
 }
 
 function stringify( l, r ){
@@ -185,17 +166,20 @@ app.get('/id', function(req,res) {
         right: 255
       };
 
+      // strictly for testing
       controllers["xyxyxya"] = {
         left: 122,
         right: 122
       };
 
+      pairControllerToCart();
+
       var newCart = {id:lastIndex};
       wiflyCarts.push(newCart);
-      //console.log(lastIndex + " " + wiflyCarts[lastIndex]);
-
    }
-   res.setHeader("Content-Type", "text/html");
+
+   // maybe we can get rid of this?
+   //res.setHeader("Content-Type", "text/html");
    res.write(lastIndex.toString());
    res.end();
 
