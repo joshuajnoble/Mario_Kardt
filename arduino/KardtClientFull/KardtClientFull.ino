@@ -167,7 +167,7 @@ void setup()
     /* Setup the WiFly to connect to a wifi network */
     Serial.println("Joining network");
     wifly.setSSID(mySSID);
-    //wifly.setPassphrase(myPassword);
+    wifly.setPassphrase(myPassword);
     wifly.enableDHCP();
 
     if (wifly.join()) {
@@ -192,7 +192,7 @@ void setup()
   }
 
   // Setup for UDP packets, sent automatically
-  wifly.setIpProtocol(WIFLY_PROTOCOL_HTTP);
+  wifly.setIpProtocol(WIFLY_PROTOCOL_UDP);
   // do we need device ID before setHost()?
   //wifly.setHost(IP, PORT);	// Send UDP packet to this server and port
   wifly.open(IP, PORT);
@@ -225,13 +225,13 @@ void loop()
 {
   // check wifly
   if(!hasGottenIDFromServer) {
-    wifly.println("GET /id");
+    wifly.print("id request");
     
     // just wait for this
     while( wifly.available() < 0 ) {
     }
     
-    THIS_ID = wifly.read();
+    THIS_ID = wifly.read() - '0';
     hasGottenIDFromServer = true;
     
   } else {
@@ -242,14 +242,14 @@ void loop()
     int color = checkColors();
     
     if( color != -1 && !lastReqResponded ) {
-      wifly.print("GET /play?id=");
+      wifly.print("id=");
       wifly.print(THIS_ID);
       wifly.print('&color=');
       wifly.println(color);
       lastReqResponded = false;
     } else if( !lastReqResponded ) {
       
-      wifly.print("GET /play?id=");
+      wifly.print("id=");
       wifly.print(THIS_ID);
       lastReqResponded = false;
     }

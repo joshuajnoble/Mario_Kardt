@@ -6,7 +6,8 @@
 var express = require('express')
   , routes = require('./routes')
   , http = require('http')
-  , sio = require('socket.io');
+  , sio = require('socket.io')
+  , dgram = require('dgram');
 
 var app = express();
 
@@ -23,6 +24,15 @@ app.configure(function(){
   app.use(app.router);
   app.use(require('less-middleware')({ src: __dirname + '/public' }));
   app.use(express.static(__dirname + '/public'));
+
+  // just make sure that we're not updating too fast
+  setInterval(function() {
+    updateGame(); // try to only update the game 10xSec
+    if(Math.abs(time - Date.now()) > 100) {
+      time = Date.now();
+    }
+  }, 100);
+
 });
 
 app.configure('development', function(){
@@ -34,24 +44,40 @@ var controllers = [];
 var controllerCartJoint = [];
 var lastIndex = 0;
 var currentGameState = {}; // what modifier it is, and who did it
+var time = Date.now();
+
+// udp socket
+var udpSocket = dgram.createSocket('udp4');
+
+udpSocket.on("listening", function () {
+  var address = udpSocket.address();
+  console.log("server listening " + address.address + ":" + address.port);
+});
+
+udpSocket.on("message", function(msg, rinfo) {
+  var messageStr = msg.toString();
+  var idInd = messageStr.indexOf("id=");
+  var colorInd = messageStr.indexOf("color=");
+  var id, color;
+  if(idInd != -1 && colorInd != -1) {
+    id = messageStr.slice(idInd, idInd+1);
+    color = messageStr.slice(colorInd, idInd+1);
+  }
+  currentGameState['event'] = color;
+  currentGameState['source'] = id;
+
+  setTimeout( function() {
+      currentGameState = null;
+  }, 2000); // 2 seconds of madness?
+
+});
+
+udpSocket.bind(8001);
 
 //app.get('/', routes.index);
-app.get('/play', function(req, res) {
+function updateGame() {
 
-   //var url_parts = url.parse(req.url, true);
-   var query = req.query;
-
-// we have a color!
-   /*if(query['color']) {
-      currentGameState['event'] = query.color;
-      currentGameState['source'] = query.id;
-
-      setTimeout( function() {
-          currentGameState = null;
-      }, 2000); // 2 seconds of madness?
-
-   } 
-   else if(currentGameState) 
+   if(currentGameState) 
    {
       switch(currentGameState['event']) {
       	case 0:
@@ -101,9 +127,9 @@ app.get('/play', function(req, res) {
         default:
         break;
       }
-   } else {
-*/
-    var currentController = null;
+   }
+
+    /*var currentController = null;
     var left;
     var right;
     controllerCartJoint.forEach( function( obj, index, arr) {
@@ -114,8 +140,18 @@ app.get('/play', function(req, res) {
    //}
    res.setHeader("Content-Type", "text/html");
    if(currentController) {
-    
-    if(currentController.left < 10) {
+  
+    res.write([left, right].join(":"));
+  } else {
+    res.write("122:122");
+  }
+   res.end();*/
+
+}
+
+function stringify( l, r ){
+  var left = "", right = "";
+  if(l < 10) {
       left = "00" + currentController.left.toString();
     } else if(currentController.left < 100) {
       left = "0" + currentController.left.toString();
@@ -123,22 +159,21 @@ app.get('/play', function(req, res) {
       left = currentController.left.toString();
     }
 
-    if(currentController.right < 10) {
+    if(r < 10) {
       right = "00" + currentController.right.toString();
     } else if(currentController.right < 100) {
       right = "0" + currentController.right.toString();
     } else {
       right = currentController.right.toString();
     }
-    
+    return left + ":" + right;
+}
 
-    res.write([left, right].join(":"));
-  } else {
-    res.write("122:122");
+function pairControllerToCart () {
+  if(controllerCartJoint.length < controllers.length && controllerCartJoint.length < wiflyCarts.length) {
+    controllerCartJoint.push( {contoller:controllers[controllers.length-1], cart:wiflyCarts[wiflyCarts.length-1]} );
   }
-   res.end();
-
-});
+}
 
 app.get('/id', function(req,res) {
 
@@ -155,17 +190,6 @@ app.get('/id', function(req,res) {
         right: 122
       };
 
-      /*var k = 0;
-      var foundKey;
-      for(var key in controllers) {
-        if(k == lastIndex) {
-          console.log(" found index " + k.toString() + " " + key);
-          foundKey = key;
-          break;
-        }
-        k++;
-      }
-      */
       var newCart = {id:lastIndex};
       wiflyCarts.push(newCart);
       //console.log(lastIndex + " " + wiflyCarts[lastIndex]);
@@ -179,21 +203,15 @@ app.get('/id', function(req,res) {
 
 });
 
-function pairControllerToCart () {
-  if(controllerCartJoint.length < controllers.length && controllerCartJoint.length < wiflyCarts.length) {
-    controllerCartJoint.push( {contoller:controllers[controllers.length-1], cart:wiflyCarts[wiflyCarts.length-1]} );
-  }
-};
-
 // create server
 var server = http.createServer(app).listen(app.get('port'), function(){
   console.log("Express server listening on port " + app.get('port'));
 });
 
 // SOCKET CODE
-
 var io = sio.listen(server);
 
+// now we send messages to everyone
 io.sockets.on('connection', function (socket) {
   console.log(socket.id);
 
@@ -206,11 +224,31 @@ io.sockets.on('connection', function (socket) {
 
     controller.left = data;
     console.log(controllers[socket.id]);
+
+    var msgStr = "";
+    controllerCartJoint.forEach( function( obj, index, arr) {
+      msgStr += obj.cart.id + "=" + stringify(obj.controller.left, obj.controller.right) + ";";
+    });
+
+    var buf = Buffer(msgStr.split(""));
+    udpSocket.send(buf, 0, buf.length, 3001, "0.0.0.0");
+    time = Date.now();
+
   });
 
+  // now we send messages to everyone
   socket.on('right', function (data) {
     controller.right = data;
     console.log(controllers[socket.id]);
+
+    var msgStr = "";
+    controllerCartJoint.forEach( function( obj, index, arr) {
+      msgStr += obj.cart.id + "=" + stringify(obj.controller.left, obj.controller.right) + ";";
+    });
+
+    var buf = Buffer(msgStr.split(""));
+    udpSocket.send(buf, 0, buf.length, 3001, "0.0.0.0");
+    time = Date.now();
   });
 
   socket.on('disconnect', function () {
