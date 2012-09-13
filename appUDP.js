@@ -51,10 +51,11 @@ var udpSocket = dgram.createSocket('udp4');
 
 udpSocket.on("listening", function () {
   var address = udpSocket.address();
-  console.log("server listening " + address.address + ":" + address.port);
+  console.log("UDP server listening " + address.address + ":" + address.port);
 });
 
 udpSocket.on("message", function(msg, rinfo) {
+  console.log(" Got a message " );
   var messageStr = msg.toString();
   var idInd = messageStr.indexOf("id=");
   var colorInd = messageStr.indexOf("color=");
@@ -72,7 +73,7 @@ udpSocket.on("message", function(msg, rinfo) {
 
 });
 
-udpSocket.bind(8001);
+udpSocket.bind(3001, "0.0.0.0");
 
 //app.get('/', routes.index);
 function updateGame() {
@@ -213,7 +214,7 @@ io.sockets.on('connection', function (socket) {
     controllerCartJoint.forEach( function( obj, index, arr) {
       msgStr += obj.cart.id + "=" + stringify(obj.controller.left, obj.controller.right) + ";";
     });
-
+    msgStr += "x";
     var buf = Buffer(msgStr.split(""));
     udpSocket.send(buf, 0, buf.length, 3001, "0.0.0.0");
     time = Date.now();
@@ -229,7 +230,7 @@ io.sockets.on('connection', function (socket) {
     controllerCartJoint.forEach( function( obj, index, arr) {
       msgStr += obj.cart.id + "=" + stringify(obj.controller.left, obj.controller.right) + ";";
     });
-
+    msgStr += "x";
     var buf = Buffer(msgStr.split(""));
     udpSocket.send(buf, 0, buf.length, 3001, "0.0.0.0");
     time = Date.now();
