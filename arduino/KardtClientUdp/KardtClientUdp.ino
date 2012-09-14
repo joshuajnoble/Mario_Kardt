@@ -63,10 +63,14 @@
 #include <WiFlyHQ.h> // wifly!
 #include <Wire.h> // i2c library to talk to the color sensor
 
+//////////////////////////////////////////////////////////////////
+// ADJD-S311
+//////////////////////////////////////////////////////////////////
+
 // ADJD-S311 Pin definitions:
 int sdaPin = 5;  // serial data, hardwired, can't change
 int sclPin = 6;  // serial clock, hardwired, can't change
-int ledPin = 2;  // LED light source pin, any unused pin will work
+int ledPin = 23;  // LED light source pin, any unused pin will work
 
 // initial values for integration time registers
 unsigned char colorCap[4] = {9, 9, 2, 5};  // values must be between 0 and 15
@@ -79,7 +83,8 @@ signed char colorOffset[4];  // Stores RGB and C offset values
 //////////////////////////////////////////////////////////////////
 
 bool hasGottenIDFromServer = false;
-char udpMessage[100];
+String udpResponse = "";
+String httpResponse = "";
 short messageIndex = 0;
 
 // Teensy can do regular Serial, so we might just
@@ -87,16 +92,15 @@ short messageIndex = 0;
 AltSoftSerial wifiSerial(9,10);
 
 // Change these to match your WiFi network
-const char mySSID[] = "hoembaes";
-const char myPassword[] = "tigerstyle";
+const char mySSID[] = "frogwirelessext";
+const char myPassword[] = "friedolin";
 
 uint32_t lastSend = 0;
 uint32_t count=0;
 
 const int HTTP_PORT = 3000;
 const int UDP_PORT = 3001;
-//const char IP[] = "192.168.1.60";
-const char IP[] = "192.168.1.106";
+const char IP[] = "10.118.73.86";
 
 int THIS_ID;
 int colorSensorVal;
@@ -140,7 +144,28 @@ void setup()
   pinMode(BIN2,OUTPUT);
   pinMode(STBY,OUTPUT);
 
-  char buf[32];
+  char buf[64];
+  
+  ////////////////////////////////////////////////////
+  // COLOR SENSOR
+  ////////////////////////////////////////////////////
+
+  pinMode(ledPin, OUTPUT);  // Set the sensor's LED as output
+  digitalWrite(ledPin, HIGH);  // Initially turn LED light source on
+  
+  Serial.begin(9600);
+  Serial.println( "begin wire ");
+  Wire.begin();
+  Serial.println( "wire begun ");
+  
+  delay(1);  // Wait for ADJD reset sequence
+  initADJD_S311();  // Initialize the ADJD-S311, sets up cap and int registers
+
+  calibrateColor();  // This calibrates R, G, and B int registers
+  calibrateClear();  // This calibrates the C int registers
+  calibrateCapacitors();  // This calibrates the RGB, and C cap registers
+  getRGBC();  // After calibrating, we can get the first RGB and C data readings
+
 
   /////////////////////////////////////////////////////
   // WIFLY
@@ -184,121 +209,119 @@ void setup()
 
   if (wifly.ping(buf)) {
     Serial.println("ok");
-  } 
-  else {
+  } else {
     Serial.println("failed");
   }
 
   // Setup for UDP packets, sent automatically
-  wifly.setIpProtocol(WIFLY_PROTOCOL_HTTP);
+  wifly.setProtocol(WIFLY_PROTOCOL_HTTP);
+  
+  if (wifly.isConnected()) {
+    Serial.println("Old connection active. Closing");
+    wifly.close();
+  }
+  
+      
+  Serial.print("MAC: ");
+  Serial.println(wifly.getMAC(buf, sizeof(buf)));
+  Serial.print("IP: ");
+  Serial.println(wifly.getIP(buf, sizeof(buf)));
+  
   // do we need device ID before setHost()?
+  //wifly.setDeviceID("Wifly-HTTP");
   //wifly.setHost(IP, PORT);	// Send UDP packet to this server and port
-  wifly.open(IP, HTTP_PORT);
-  wifly.setDeviceID("Wifly-HTTP");
-
-  ////////////////////////////////////////////////////
-  // COLOR SENSOR
-
-
-  pinMode(ledPin, OUTPUT);  // Set the sensor's LED as output
-  digitalWrite(ledPin, HIGH);  // Initially turn LED light source on
-  
-  Serial.begin(9600);
-  Serial.println( "begin wire ");
-  Wire.begin();
-  Serial.println( "wire begun ");
-  
-  delay(1);  // Wait for ADJD reset sequence
-  initADJD_S311();  // Initialize the ADJD-S311, sets up cap and int registers
-
-  calibrateColor();  // This calibrates R, G, and B int registers
-  calibrateClear();  // This calibrates the C int registers
-  calibrateCapacitors();  // This calibrates the RGB, and C cap registers
-  getRGBC();  // After calibrating, we can get the first RGB and C data readings
-
+  if(wifly.open(IP, HTTP_PORT)) {
+    
+    Serial.print(" Get my id ");
+    wifly.println("GET /id HTTP/1.0");
+    wifly.println();
+  } else {
+    Serial.print(" can't open HTTP" );
+  }
 }
 
 
 //
 void loop()
 {
-  // check wifly
-  if(!hasGottenIDFromServer) {
-    
-    char buf[64];
-    
-    Serial.print(" Get my id ");
-    wifly.println("GET /id");
-    wifly.println();
-    
-    // just wait for this
-    while( wifly.available() < 0 ) {
-    }
-    
-    // this is horrible, but we're going with it
-    int ind = 0;
-    while( wifly.available() > 0 && ind < 64 ) {
-      buf[ind] = wifly.read();
-      ind++;
-    }
-    
-    for( int i = 0; i < 64; i++ ) {
-      if(buf[i] <= '0' && buf[i] >= '9') {
-        THIS_ID = buf[i];
-        break;
-      }  
-    }
-    THIS_ID = wifly.read();
-    hasGottenIDFromServer = true;
-    
-    Serial.print(" ID is ");
-    Serial.print(THIS_ID);
-    Serial.println(" has id  ");
-    
-    wifly.close();
-    // we have to reboot to switch from TCP to UDP
-    wifly.reboot();
-    
-    // now rejoin the network
-    if (!wifly.isAssociated()) {
-	/* Setup the WiFly to connect to a wifi network */
-	Serial.println("Joining network");
-	wifly.setSSID(mySSID);
-	wifly.setPassphrase(myPassword);
-	wifly.enableDHCP();
-    }
+  
 
-    if (wifly.join()) {
-      Serial.println("Joined wifi network");
-    } else {
-      Serial.println("Failed to join wifi network");
-      //terminal();
-     }
+  if(!hasGottenIDFromServer)
+  {
+    while ( wifly.available() > 0 ) {
+      char c = wifly.read();
+      httpResponse += c;
+    }
     
-    // now open the UDP
-    wifly.setIpProtocol(WIFLY_PROTOCOL_UDP);
-    wifly.setHost(IP, UDP_PORT);	// Send UPD packets to this server and port
+    int idIndex = httpResponse.indexOf("id: ");
+    if(idIndex != -1 && httpResponse.length() > idIndex + 5) 
+    {
+    
+      Serial.println(httpResponse);
+      
+      int idInd = idIndex + 4;
+      Serial.print("ID index is at:");
+      Serial.print(idInd);
+      Serial.print(" and value is: ");
+      Serial.println(httpResponse.charAt(idInd));
 
-    Serial.print("MAC: ");
-    Serial.println(wifly.getMAC(buf, sizeof(buf)));
-    Serial.print("IP: ");
-    Serial.println(wifly.getIP(buf, sizeof(buf)));
-    Serial.print("Netmask: ");
-    Serial.println(wifly.getNetmask(buf, sizeof(buf)));
-    Serial.print("Gateway: ");
-    Serial.println(wifly.getGateway(buf, sizeof(buf)));
+      char ID = httpResponse.charAt(idInd);
+      THIS_ID = strtol(&ID, NULL, 0);
+      
+      Serial.print(" We have an ID ");
+      Serial.println(THIS_ID);
 
-    wifly.setDeviceID("Wifly-UDP");
-    Serial.print("DeviceID: ");
-    Serial.println(wifly.getDeviceID(buf, sizeof(buf)));
-    
-  } else {
-    
+      hasGottenIDFromServer = true;
+      wifly.flush();
+      
+      // close
+      wifly.close();
+      // we have to reboot to switch from TCP to UDP
+      wifly.reboot();
+      
+      // now rejoin the network
+      if (!wifly.isAssociated()) {
+        /* Setup the WiFly to connect to a wifi network */
+        Serial.println("Joining network");
+        wifly.setSSID(mySSID);
+        wifly.setPassphrase(myPassword);
+        wifly.enableDHCP();
+      }
+      
+      if (wifly.join()) {
+        Serial.println("Joined wifi network");
+      } else {
+        Serial.println("Failed to join wifi network");
+        //terminal();
+       }
+      
+      // now open the UDP
+      wifly.setProtocol(WIFLY_PROTOCOL_UDP);
+      wifly.setHost(IP, UDP_PORT);  // Send UPD packets to this server and port
+      wifly.setPort(3002);
+      
+      char buf[32];
+      Serial.print("MAC: ");
+      Serial.println(wifly.getMAC(buf, sizeof(buf)));
+      Serial.print("IP: ");
+      Serial.println(wifly.getIP(buf, sizeof(buf)));
+      Serial.print("Netmask: ");
+      Serial.println(wifly.getNetmask(buf, sizeof(buf)));
+      Serial.print("Gateway: ");
+      Serial.println(wifly.getGateway(buf, sizeof(buf)));
+      wifly.setDeviceID("Wifly-UDP");
+      Serial.print("DeviceID: ");
+      Serial.println(wifly.getDeviceID(buf, sizeof(buf)));
+      
+      wifly.println("hi");
+      wifly.println();
+    }
+  }
+  else {
+
     // check the ADJD
     getRGBC();
-    
     int color = checkColors();
-    int color = -1;
     
     if( color != -1 ) {
       wifly.print("id=");
@@ -314,12 +337,18 @@ void loop()
       char c = wifly.read();
       
       if(c == 'x') {
-        udpMessage[messageIndex] = '/0';
-        parseUDPMessage(&udpMessage[0]);
-        messageIndex = 0;
-        memset(udpMessage, 0x20, 100);
+        Serial.print(udpResponse);
+        Serial.println(" parsing UDP ");  
+        if(parseUDPMessage()) {
+          udpResponse = "";
+        }
+        Serial.print(" doing ");
+        Serial.print(left);
+        Serial.print(" ");
+        Serial.print(right);
+        Serial.println();
       } else {
-        udpMessage[messageIndex] = c;
+        udpResponse += c;
         messageIndex++;
       }    
     }
@@ -336,7 +365,6 @@ void loop()
     } else {
       motor_control( MOTOR_B, REVERSE, 255 - right);
     }
-    
   }
 }
 
@@ -377,53 +405,53 @@ void terminal()
   }
 }
 
-void parseUDPMessage( const char* inMsg ) {
-  
-  const char *pmsg = inMsg;
-  while( pmsg ) {
-    if(*pmsg == '=') {
-      if(atoi(pmsg+1) == THIS_ID) {
-        break;
-      }
-    }
-    ++pmsg;
-  }
+bool parseUDPMessage( ) {
   
   char t[3];
   memset(t, 0x20, 3);
   
   boolean leading = true;
   int i = 0;
+  
+  char c = THIS_ID;
+  String thisID = "id=" + c;
+  
+  int j = udpResponse.indexOf(thisID);
+  if(j == -1) {
+    return false;
+  }
   while( i < 3 ) {
-    if(*pmsg != '0'){
+    if(udpResponse.charAt(j) != '0') {
       leading = false;
     }
     if(!leading) {
-      t[i] = *pmsg;
+      t[i] = udpResponse.charAt(j);
     }
-    ++pmsg;
+    j++;
     i++;
   }
-  //char sep = wifly.read(); // throw away
-  ++pmsg;
+  
+  j+=1;
   
   left = (int) strtol(&t[0], NULL, 0);
   leading = true;
+  memset(t, 0x20, 3);
   
   i = 0;
   while( i < 3 ) {
-    if(*pmsg != '0'){
+    if(udpResponse.charAt(j) != '0') {
       leading = false;
     }
     if(!leading) {
-      t[i] = *pmsg;
+      t[i] = udpResponse.charAt(j);
     }
-    ++pmsg;
+    j++;
     i++;
   }
-  
+
   right = (int) strtol(&t[0], NULL, 0);
   
+  return true;
 }
 
 //////////////////////////////////////////////////////////////////
@@ -547,6 +575,9 @@ of the ADJD-S311.
 */
 int calibrateClear()
 {
+  
+  Serial.println(" calibrate clear ");
+  
   int gainFound = 0;
   int upperBox=4096;
   int lowerBox = 0;
@@ -572,6 +603,9 @@ int calibrateClear()
         gainFound=1;
     }
   }
+  
+  Serial.println(" done calibrate clear ");
+  
   return half;
 }
 
@@ -619,6 +653,9 @@ int calibrateColor()
       }
     }
   }
+  
+  Serial.println(" done calibrate clear ");
+  
   return half;
 }
 
@@ -697,6 +734,8 @@ void calibrateCapacitors()
     int gCal = calibrationGreen;
     int bCal = calibrationBlue;
   }
+  
+  Serial.println(" done calibrate caps ");
   
 }
 

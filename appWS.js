@@ -47,49 +47,12 @@ var lastIndex = 0;
 var currentGameState = {}; // what modifier it is, and who did it
 var time = Date.now();
 
-// udp socket
-var udpSocket = dgram.createSocket('udp4');
-
-udpSocket.on("listening", function () {
-  var address = udpSocket.address();
-  console.log("UDP server listening " + address.address + ":" + address.port);
-});
-
-udpSocket.on("message", function(msg, rinfo) {
-  //console.log(" Got a message " );
-  //console.log('client got: ' + msg + ' from ' + rinfo.address + ':' + rinfo.port);
-  //console.log(msg.toString('ascii'));
-  var messageStr = msg.toString();
-  var idInd = messageStr.indexOf("id=");
-  var colorInd = messageStr.indexOf("color=");
-  var id, color;
-  if(idInd != -1 && colorInd != -1) {
-    id = messageStr.slice(idInd, idInd+1);
-    color = messageStr.slice(colorInd, idInd+1);
-  }
-
-  if(currentGameState) {
-    currentGameState['event'] = color;
-    currentGameState['source'] = id;
-  }
-
-  setTimeout( function() {
-      currentGameState = null;
-  }, 2000); // 2 seconds of madness?
-
-});
-
-udpSocket.bind(3001, "0.0.0.0");
-
 app.get('/', routes.index);
 
 function updateGame() {
 
-  var buf = Buffer("test");
-  wiflyCarts.forEach(function( obj, index, array) {
-    console.log(obj.ip);
-    udpSocket.send(buf, 0, buf.length, 3002, obj.ip);
-  });
+  // strictly DEBUG
+  cartIo.sockets.send("test");
 
   if(!currentGameState)
     return;
@@ -192,7 +155,6 @@ app.on('connection', function(sock) {
 app.get('/id', function(req,res) {
 
   console.log(req.connection.remoteAddress);
-  //var endpoint = io.manager.handshaken[socket.id].address;
 
    if(!wiflyCarts[lastIndex]) {
       var newCart = {id:lastIndex, ip:req.connection.remoteAddress};
@@ -214,6 +176,44 @@ var server = http.createServer(app).listen(app.get('port'), function(){
 
 // SOCKET CODE
 var io = sio.listen(server);
+var cartIo = sio.listen(3001);
+
+cartIo.on('connection', function(socket){
+
+  socket.on('id', function(data)
+  {
+    if(!wiflyCarts[lastIndex]) {
+      var newCart = {id:lastIndex, ip:req.connection.remoteAddress};
+      wiflyCarts.push(newCart);
+   }
+
+   res.writeHead(200, {"id":lastIndex.toString()}, {"Content-Type":"text/plain"});
+   res.write(lastIndex.toString());
+   res.end();
+
+   lastIndex++;
+  });
+
+  socket.on('color', function(data) {
+    var messageStr = data;
+    var idInd = messageStr.indexOf("id=");
+    var colorInd = messageStr.indexOf("color=");
+    var id, color;
+    if(idInd != -1 && colorInd != -1) {
+      id = messageStr.slice(idInd, idInd+1);
+      color = messageStr.slice(colorInd, idInd+1);
+    }
+
+    if(currentGameState) {
+      currentGameState['event'] = color;
+      currentGameState['source'] = id;
+    }
+
+    setTimeout( function() {
+        currentGameState = null;
+    }, 2000); // 2 seconds of madness
+  });
+});
 
 // now we send messages to everyone
 io.sockets.on('connection', function (socket) {
@@ -242,7 +242,8 @@ io.sockets.on('connection', function (socket) {
     });
     msgStr += "x";
     var buf = Buffer(msgStr);
-    udpSocket.send(buf, 0, buf.length, 3001, "0.0.0.0");
+    //udpSocket.send(buf, 0, buf.length, 3001, "0.0.0.0");
+    cartIo.sockets.send(msgStr);
     time = Date.now();
 
   });
@@ -258,7 +259,8 @@ io.sockets.on('connection', function (socket) {
     });
     msgStr += "x";
     var buf = Buffer(msgStr);
-    udpSocket.send(buf, 0, buf.length, 3001, "0.0.0.0");
+    //udpSocket.send(buf, 0, buf.length, 3001, "0.0.0.0");
+    cartIo.sockets.send(msgStr);
     time = Date.now();
   });
 
