@@ -6,14 +6,13 @@
 var express = require('express')
   , routes = require('./routes')
   , http = require('http')
-  , sio = require('socket.io')
-  , dgram = require('dgram')
-  , WebSocketServer = require('websocket').server;
+  , sio = require('socket.io');
 
 var app = express();
 
 app.configure(function(){
-  app.set('port', process.env.PORT || 3000);
+  //app.set('port', process.env.PORT || 3000);
+  app.set('port', process.env.PORT || 3001);
   app.set('views', __dirname + '/views');
   app.set('view engine', 'ejs');
   app.use(express.favicon());
@@ -47,12 +46,19 @@ var lastIndex = 0;
 var currentGameState = {}; // what modifier it is, and who did it
 var time = Date.now();
 
-app.get('/', routes.index);
+app.get('/', function (req, res) {
+  res.writeHead(101, "");
+  res.write();
+  res.end();
+
+})
+
+app.get('/controller', routes.index);
 
 function updateGame() {
 
   // strictly DEBUG
-  cartIo.sockets.send("test");
+  io.sockets.send("test");
 
   if(!currentGameState)
     return;
@@ -175,23 +181,41 @@ var server = http.createServer(app).listen(app.get('port'), function(){
 });
 
 // SOCKET CODE
-var io = sio.listen(server);
-var cartIo = sio.listen(3001);
+//var io = sio.listen(server);
+var io = sio.listen(3000);
 
-cartIo.on('connection', function(socket){
+io.configure(function (){
+    io.set('transports', [
+    'websocket'
+  , 'flashsocket'
+  , 'htmlfile'
+  , 'xhr-polling'
+  , 'jsonp-polling'
+  ]);
+});
 
-  socket.on('id', function(data)
+// now we send messages to everyone
+io.sockets.on('connection', function (socket) {
+  console.log(socket.id);
+
+  var controller = null, cart = null;
+
+  socket.on('message', function(data) {
+    console.log(data);
+  });
+
+  socket.on('controller', function(data){
+    controller = {id:socket.id, left: 122, right: 122 };
+    controllers.push(controller);
+    pairControllerToCart();
+  });
+
+  socket.on('cart', function(data)
   {
-    if(!wiflyCarts[lastIndex]) {
-      var newCart = {id:lastIndex, ip:req.connection.remoteAddress};
-      wiflyCarts.push(newCart);
-   }
-
-   res.writeHead(200, {"id":lastIndex.toString()}, {"Content-Type":"text/plain"});
-   res.write(lastIndex.toString());
-   res.end();
-
-   lastIndex++;
+    
+    cart = {id:socket.id};
+    wiflyCarts.push(cart);
+    pairControllerToCart();
   });
 
   socket.on('color', function(data) {
@@ -213,23 +237,6 @@ cartIo.on('connection', function(socket){
         currentGameState = null;
     }, 2000); // 2 seconds of madness
   });
-});
-
-// now we send messages to everyone
-io.sockets.on('connection', function (socket) {
-  console.log(socket.id);
-
-  var controller = {id:socket.id, left: 122, right: 122 };
-  controllers.push(controller);
-
-  /*if(wiflyCarts.length == 0) {
-      var newCart = {id:lastIndex};
-      wiflyCarts.push(newCart);
-    }*/
-
-  console.log(" controller size "+controllers.length);
-  pairControllerToCart();
-  console.log(" controller size "+controllers.length);
 
   socket.on('left', function (data) {
 
@@ -243,7 +250,7 @@ io.sockets.on('connection', function (socket) {
     msgStr += "x";
     var buf = Buffer(msgStr);
     //udpSocket.send(buf, 0, buf.length, 3001, "0.0.0.0");
-    cartIo.sockets.send(msgStr);
+    socket.emit(msgStr);
     time = Date.now();
 
   });
@@ -260,7 +267,7 @@ io.sockets.on('connection', function (socket) {
     msgStr += "x";
     var buf = Buffer(msgStr);
     //udpSocket.send(buf, 0, buf.length, 3001, "0.0.0.0");
-    cartIo.sockets.send(msgStr);
+    socket.emit(msgStr);
     time = Date.now();
   });
 
