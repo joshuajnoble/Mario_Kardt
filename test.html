@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Test</title>
+        <script>
+        var ws = new WebSocket("ws://localhost:3000/");
+		ws.onopen = function() {
+		    function schedule(i) {
+		        setTimeout(function() { 
+		        	console.log(" hi ");
+		          ws.send('Hello, Wifly! ' + i);
+		          schedule(i + 1);
+		        }, 5000);            
+		    };
+		    schedule(1);
+		};
+		ws.onmessage = function() {
+			console.log("message");
+		};
+
+        </script>
+    </head>
+    <body>
+    </body>
+</html>
