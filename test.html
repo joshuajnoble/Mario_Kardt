@@ -3,16 +3,22 @@
     <head>
         <title>Test</title>
         <script>
+        console.log(" start ")
         var ws = new WebSocket("ws://localhost:3000/");
 		ws.onopen = function() {
-		    function schedule(i) {
+			console.log(" onopen ");
+			function schedule() {
 		        setTimeout(function() { 
-		        	console.log(" hi ");
-		          ws.send('Hello, Wifly! ' + i);
-		          schedule(i + 1);
-		        }, 5000);            
-		    };
-		    schedule(1);
+		        	if(Math.random() > 0.5) {
+		          		ws.send('left:' + Math.round(Math.random() * 255));
+		          	} else {
+		          		ws.send('right:' + Math.round(Math.random() * 255));
+		          	}
+		          	schedule();
+		          	console.log("schedule");
+		        }, 1000);
+		    }
+		    schedule();
 		};
 		ws.onmessage = function() {
 			console.log("message");

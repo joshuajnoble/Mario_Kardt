@@ -8,6 +8,9 @@ from hashlib import sha1
 from mimetools import Message
 from StringIO import StringIO
 
+LEFT = 0
+RIGHT = 1
+
 class WebSocketsHandler(SocketServer.StreamRequestHandler):
     magic = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
     hasSecKey = True
@@ -16,7 +19,6 @@ class WebSocketsHandler(SocketServer.StreamRequestHandler):
     def setup(self):
         SocketServer.StreamRequestHandler.setup(self)
         print "connection established", self.client_address
-        self.server.clients.append(self)
         self.handshake_done = False
 
     def handle(self):
@@ -28,7 +30,6 @@ class WebSocketsHandler(SocketServer.StreamRequestHandler):
                 #time.sleep(5)
 
     def read_next_message(self):
-        print "has message"
         if self.hasSecKey:
             length = ord(self.rfile.read(2)[1]) & 127
             if length == 126:
@@ -64,22 +65,22 @@ class WebSocketsHandler(SocketServer.StreamRequestHandler):
 
     def handshake(self):
         data = self.request.recv(1024).strip()
-        #print data
         dSplit = data.split('\r\n', 1)
         if len(dSplit) > 1 :
             headers = Message(StringIO(data.split('\r\n', 1)[1]))
         else:
             headers = Message(StringIO(data.split('\r\n', 1)))
 
-        if headers.get("Upgrade", None).lower() != "websocket":
-            print "no upgrade"
+        if headers.get("Upgrade", None) == None:
             return
-        
-        print 'Handshaking...'
+
+        if headers.get("Upgrade", None).lower() != "websocket":
+            return
 
         try:
             key = headers['Sec-WebSocket-Key']
             digest = b64encode(sha1(key + self.magic).hexdigest().decode('hex'))
+            print "has key"
         except KeyError:
             self.hasSecKey = False
             print "no Sec-WebSocket-Key"
@@ -91,19 +92,36 @@ class WebSocketsHandler(SocketServer.StreamRequestHandler):
         #this is also where we can distinguish a wifly from a browers
         if(self.hasSecKey):
             response += 'Sec-WebSocket-Accept: %s\r\n\r\n' % digest
-            self.server.browserClients.append(self)
 
-
+        print "sending back handshake"
         self.handshake_done = self.request.send(response)
+        if(self.hasSecKey):
+            self.server.addBrowser(self)
+        else:
+            self.server.addWiFly(self)
 
     def on_message(self, message):
         self.receivedMessage += message.strip("\r")
-        if self.receivedMessage.find("Hello, Wifly") != -1:
-            self.server.addWiFly(self)
-            self.receivedMessage = ""
-        if self.receivedMessage.find("Hello, Browser") != -1:
-            self.server.addBrowser(self)
-            self.receivedMessage = ""
+        # here's where we break out our messages
+        # only browsers send a security key
+        if(self.hasSecKey):
+            #make sure we have at least a whole message
+            if self.receivedMessage.find("left") != -1 and len(self.receivedMessage) > 6:
+                self.receivedMessage = self.receivedMessage[self.receivedMessage.index("left"):len(self.receivedMessage)]
+                self.server.routeControlSignal(self, self.receivedMessage, LEFT)
+                self.receivedMessage = ""
+
+            #make sure we have at least a whole message
+            if self.receivedMessage.find("right") != -1 and len(self.receivedMessage) > 7:
+                self.receivedMessage = self.receivedMessage[self.receivedMessage.index("right"):len(self.receivedMessage)]
+                self.server.routeControlSignal(self, self.receivedMessage, RIGHT)
+                self.receivedMessage = ""
+
+        else:
+
+            if self.receivedMessage.find("color") != -1:
+                self.server.getColor(self, message)
+	        self.receivedMessage = ""
 
 
 class WSServer(ThreadingTCPServer):
@@ -119,7 +137,6 @@ class WSServer(ThreadingTCPServer):
         print " handle request "
         handler = ThreadingTCPServer.handle_request(self)
         handler.set_handlers(self.handleWiFlyMessage, self.handleBrowserMessage)
-        clients.append(handler)
         return handler
 
     def finish_request(self, *args, **kws):
@@ -129,68 +146,80 @@ class WSServer(ThreadingTCPServer):
     def addWiFly(self, handler):
         print "handleWiFlyMessage"
         self.wiflyClients.append(handler)
-        if(len(wiflyClients) > len(browserClients)):
-            joint = {'wifly':handler, 'browser':browserClients[len(browserClients)-1], 'cachedSpeed':[]}
-            jointBrowserWifly.append(joint)
+        if(len(self.wiflyClients) > len(self.browserClients) and len(self.browserClients) > len(self.jointBrowserWifly)):
+            joint = {'wifly':handler, 'browser':browserClients[len(browserClients)-1], 'cachedSpeed':[122, 122]}
+            self.jointBrowserWifly.append(joint)
 
     def addBrowser(self, handler):
         print "handleBrowserMessage"
         self.browserClients.append(handler)
-        if(len(browserClients) > len(wiflyClients)):
-            joint = {'wifly':wiflyClients[len(wiflyClients)-1], 'browser':handler, 'cachedSpeed':[]}
-            jointBrowserWifly.append(joint)
+        if(len(self.browserClients) > len(self.jointBrowserWifly) and len(self.wiflyClients) > len(self.jointBrowserWifly)):
+            joint = {'wifly':self.wiflyClients[len(self.wiflyClients)-1], 'browser':handler, 'cachedSpeed':[122, 122]}
+            self.jointBrowserWifly.append(joint)
 
-    def routeControlSignal(self, handler, message):
-        for joint in jointBrowserWifly:
+    def routeControlSignal(self, handler, message, side):
+        print "control signal"
+        for joint in self.jointBrowserWifly:
             if(joint['browser'] == handler):
-                joint['wifly'].send_message(stringify(message))
+                #print "found handler " + str(handler.client_address)
+                
+                if message.partition(':')[2].isalnum():
+                    joint['cachedSpeed'][side] = int(message.partition(':')[2])
+                else:
+                    tmp = message.partition(':')[2]
+                    joint['cachedSpeed'][side] = int(tmp.partition(':')[2])
+
+                print "cachedSpeed " + str(joint['cachedSpeed'][side])
+                joint['wifly'].send_message(self.stringify(joint['cachedSpeed'][LEFT], joint['cachedSpeed'][RIGHT]))
                 return
 
     def getColor(self, handler, message):
-        for joint in jointBrowserWifly:
-            if(joint['browser'] == handler):
-                joint['wifly'].send_message(stringify(message))
+        for joint in self.jointBrowserWifly:
+            if(joint['wifly'] == handler):
+                currentGameEvent = int(message)
+                currentGameEventOwner = handler.client_address
+                t = Timer(2.0, clearGameState)
                 return
 
     def gameUpdate(self):
 
-        if currentGameEvent == 1:
-            slowDown()
-        elif currentGameEvent == 2:
-            circle()
-        elif currentGameEvent == 3:
-            skewRight()
-        elif currentGameEvent == 4:
-            skewLeft()
+        if self.currentGameEvent == 1:
+            self.slowDown()
+        elif self.currentGameEvent == 2:
+            self.circle()
+        elif self.currentGameEvent == 3:
+            self.skewRight()
+        elif self.currentGameEvent == 4:
+            self.skewLeft()
 
 
     def slowDown(self):
-        for joint in jointBrowserWifly:
-            if(joint['wifly'].client_address != currentGameEventOwner):
-                joint['wifly'].send_message( stringify(joint['cachedSpeed'][0]*0.9, joint['cachedSpeed'][1]*0.9))
+        for joint in self.jointBrowserWifly:
+            if(joint['wifly'].client_address != self.currentGameEventOwner):
+                joint['wifly'].send_message( self.stringify(joint['cachedSpeed'][0]*0.9, joint['cachedSpeed'][1]*0.9))
             else:
-                joint['wifly'].send_message( stringify(joint['cachedSpeed'][0], joint['cachedSpeed'][1]))
+                joint['wifly'].send_message( self.stringify(joint['cachedSpeed'][0], joint['cachedSpeed'][1]))
 
     def circle(self):
-        for joint in jointBrowserWifly:
-            if(joint['wifly'].client_address != currentGameEventOwner):
-                joint['wifly'].send_message( stringify(joint['cachedSpeed'][0]*-0.9, joint['cachedSpeed'][1]*0.9))
+        for joint in self.jointBrowserWifly:
+            if(joint['wifly'].client_address != self.currentGameEventOwner):
+                joint['wifly'].send_message( self.stringify(joint['cachedSpeed'][0]*-0.9, joint['cachedSpeed'][1]*0.9))
             else:
-                joint['wifly'].send_message( stringify(joint['cachedSpeed'][0], joint['cachedSpeed'][1]))
+                joint['wifly'].send_message( self.stringify(joint['cachedSpeed'][0], joint['cachedSpeed'][1]))
 
     def skewRight(self):
-        for joint in jointBrowserWifly:
-            if(joint['wifly'].client_address != currentGameEventOwner):
-                joint['wifly'].send_message( stringify(joint['cachedSpeed'][0], joint['cachedSpeed'][1]*0.9))
+        for joint in self.jointBrowserWifly:
+            if(joint['wifly'].client_address != self.currentGameEventOwner):
+                joint['wifly'].send_message( self.stringify(joint['cachedSpeed'][0], joint['cachedSpeed'][1]*0.9))
             else:
-                joint['wifly'].send_message( stringify(joint['cachedSpeed'][0], joint['cachedSpeed'][1]))
+                joint['wifly'].send_message( self.stringify(joint['cachedSpeed'][0], joint['cachedSpeed'][1]))
 
     def skewLeft(self):
-        for joint in jointBrowserWifly:
-            if(joint['wifly'].client_address != currentGameEventOwner):
-                joint['wifly'].send_message( stringify(joint['cachedSpeed'][0]*0.9, joint['cachedSpeed'][1]))
+        for joint in self.jointBrowserWifly:
+            if(joint['wifly'].client_address != self.currentGameEventOwner):
+                joint['wifly'].send_message( self.stringify(joint['cachedSpeed'][0]*0.9, joint['cachedSpeed'][1]))
             else:
-                joint['wifly'].send_message( stringify(joint['cachedSpeed'][0], joint['cachedSpeed'][1]))
+                joint['wifly'].send_message( self.stringify(joint['cachedSpeed'][0], joint['cachedSpeed'][1]))
 
     def stringify(self, left, right):
         dataString = ""
@@ -212,6 +241,8 @@ class WSServer(ThreadingTCPServer):
 
         return dataString
 
+    def clearGameState():
+        self.currentGameEvent = -1
 
 if __name__ == "__main__":
     server = WSServer(("", 3000), WebSocketsHandler)
