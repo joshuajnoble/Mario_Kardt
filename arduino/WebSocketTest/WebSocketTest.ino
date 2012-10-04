@@ -32,10 +32,10 @@ bool connect(const char *hostname, const char *path="/", uint16_t port=80);
 
 WiFly wifly;
 
-const char mySSID[] = "hoembaes";
-const char myPassword[] = "tigerstyle";
+const char mySSID[] = "frogwirelessext";
+const char myPassword[] = "friedolin";
 
-char server[] = "192.168.1.106";
+char server[] = "10.118.73.78";
 int port = 3000;
 
 void setup()

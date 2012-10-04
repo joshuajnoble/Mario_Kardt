@@ -35,7 +35,7 @@ var controllerCartJoint = [];
 var lastIndex = 0;
 var currentGameState = {}; // what modifier it is, and who did it
 
-//app.get('/', routes.index);
+app.get('/', routes.index);
 app.get('/play', function(req, res) {
 
    //var url_parts = url.parse(req.url, true);
