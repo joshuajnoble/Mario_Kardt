@@ -65,7 +65,8 @@ class WebSocketsHandler(SocketServer.StreamRequestHandler):
 
     def handshake(self):
         data = self.request.recv(1024).strip()
-        #print data
+
+        print data
         dSplit = data.split('\r\n', 1)
         if len(dSplit) > 1 :
             headers = Message(StringIO(data.split('\r\n', 1)[1]))
@@ -75,7 +76,7 @@ class WebSocketsHandler(SocketServer.StreamRequestHandler):
         if headers.get("Upgrade", None).lower() != "websocket":
             print "no upgrade"
             return
-        
+
         print 'Handshaking...'
 
         try:
@@ -88,7 +89,7 @@ class WebSocketsHandler(SocketServer.StreamRequestHandler):
         response = 'HTTP/1.1 101 Switching Protocols\r\n'
         response += 'Upgrade: websocket\r\n'
         response += 'Connection: Upgrade\r\n'
-        
+
         if(self.hasSecKey):
             response += 'Sec-WebSocket-Accept: %s\r\n\r\n' % digest
 
@@ -134,12 +135,12 @@ class WSServer(ThreadingTCPServer):
 
     def handleBrowserMessage(self, message):
         print "handleBrowserMessage"
-        self.clients[1].send_message(message)    
+        self.clients[1].send_message(message)
 
 
 if __name__ == "__main__":
     server = WSServer(("", 3000), WebSocketsHandler)
-    
+
     server_thread = threading.Thread(target=server.serve_forever)
     ip, port = server.server_address
 

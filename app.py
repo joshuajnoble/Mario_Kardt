@@ -88,7 +88,7 @@ class WebSocketsHandler(SocketServer.StreamRequestHandler):
         response = 'HTTP/1.1 101 Switching Protocols\r\n'
         response += 'Upgrade: websocket\r\n'
         response += 'Connection: Upgrade\r\n'
-        
+
         #this is also where we can distinguish a wifly from a browers
         if(self.hasSecKey):
             response += 'Sec-WebSocket-Accept: %s\r\n\r\n' % digest
@@ -159,10 +159,11 @@ class WSServer(ThreadingTCPServer):
 
     def routeControlSignal(self, handler, message, side):
         print "control signal"
+        print message
         for joint in self.jointBrowserWifly:
             if(joint['browser'] == handler):
                 #print "found handler " + str(handler.client_address)
-                
+
                 if message.partition(':')[2].isalnum():
                     joint['cachedSpeed'][side] = int(message.partition(':')[2])
                 else:
@@ -246,7 +247,7 @@ class WSServer(ThreadingTCPServer):
 
 if __name__ == "__main__":
     server = WSServer(("", 3000), WebSocketsHandler)
-    
+
     server_thread = threading.Thread(target=server.serve_forever)
     ip, port = server.server_address
 

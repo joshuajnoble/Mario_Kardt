@@ -15,9 +15,6 @@
 #include <WiFlyHQ.h>
 #include <SoftwareSerial.h>
 
-#include <AltSoftSerial.h>
-AltSoftSerial wifiSerial(9, 10);
-
 /* Work around a bug with PROGMEM and PSTR where the compiler always
  * generates warnings.
  */
@@ -30,17 +27,17 @@ int getMessage(char *buf, int size);
 void send(const char *data);
 bool connect(const char *hostname, const char *path="/", uint16_t port=80);
 
+SoftwareSerial wifiSerial(8,9);
 WiFly wifly;
 
-const char mySSID[] = "urban";
-const char myPassword[] = "sportingFC3";
+const char mySSID[] = "mySSID";
+const char myPassword[] = "myPassword";
 
-char server[] = "192.168.2.102";
-int port = 3000;
+char server[] = "echo.websocket.org";
 
 void setup()
 {
-    Serial.begin(57600);
+    Serial.begin(115200);
 
     wifiSerial.begin(9600);
     if (!wifly.begin(&wifiSerial, &Serial)) {
@@ -62,7 +59,7 @@ void setup()
         Serial.println(F("Already joined network"));
     }
 
-    if (!connect(server, "", port)) {
+    if (!connect(server)) {
 	Serial.print(F("Failed to connect to "));
 	Serial.println(server);
 	wifly.terminal();
@@ -81,27 +78,20 @@ void loop()
     if (getMessage(inBuf, sizeof(inBuf)) > 0) {
 	Serial.print(F("Received response: "));
 	Serial.println(inBuf);
-        
-        char helloAgain[] = "Hello, Browser";
-        
-        send(helloAgain);
-        
-        delay(500);
-
     }
 
     if (Serial.available()) {
         char ch = Serial.read();
         if (ch == '\r') {
 	    /* Got a carriage return, send the message */
-	    outBuf[outBufInd] = 0; // null terminate the string
+	    outBuf[outBufInd] = 0;	// null terminate the string
 	    send(outBuf);
 	    outBufInd = 0;
 	    Serial.println();
 	} else if (outBufInd < (sizeof(outBuf) - 1)) {
 	    outBuf[outBufInd] = ch;
 	    outBufInd++;
-	    Serial.write(ch); // echo input back to Serial monitor
+	    Serial.write(ch);		// echo input back to Serial monitor
 	}
     }
 }
@@ -129,9 +119,9 @@ int getMessage(char *buf, int size)
 /** Send a message to the server */
 void send(const char *data) 
 {
-    wifly.print((uint8_t)0);
-    wifly.print(data);
-    wifly.print((uint8_t)255);
+    wifly.write((uint8_t)0);
+    wifly.write(data);
+    wifly.write((uint8_t)255);
 }
 
 /** Connect to a websocket server.
@@ -142,35 +132,24 @@ bool connect(const char *hostname, const char *path, uint16_t port)
         Serial.println(F("connect: failed to open TCP connection"));
 	return false;
     }
-    
-    //wifly.print(F("GET "));
-    //wifly.print(path);
-    //wifly.println(F(" HTTP/1.1"));
-    wifly.println(F("GET / HTTP/1.1"));
-    wifly.println(F("Upgrade: websocket"));
+
+    wifly.print(F("GET "));
+    wifly.print(path);
+    wifly.println(F(" HTTP/1.1"));
+    wifly.println(F("Upgrade: WebSocket"));
     wifly.println(F("Connection: Upgrade"));
     wifly.print(F("Host: "));
-    wifly.print(hostname);
-    wifly.println(F("\r\n"));
-    wifly.println(F("Origin: 192.168.2.102"));
-    wifly.println(F("\r\n\r\n"));
-    
-    // Wait for the handshake response
-    if (wifly.match(F("HTTP/1.1 101"), port)) {
+    wifly.println(hostname);
+    wifly.println(F("Origin: http://www.websocket.org"));
+    wifly.println();
+
+    /* Wait for the handshake response */
+    if (wifly.match(F("HTTP/1.1 101"), 2000)) {
 	wifly.flushRx(200);
 	return true;
     }
 
-    /*delay(5000);
-
-    String resp = "";
-    while( wifiSerial.available() > 0) {
-      resp += (char) wifiSerial.read();
-    }
-    Serial.println(resp);*/
-
     Serial.println(F("connect: handshake failed"));
-    wifly.flushRx(200);
     wifly.close();
 
     return false;

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Mario Kardt</title>
+    <link rel='stylesheet' href='/stylesheets/style.css' />
+  </head>
+  <body>
+
+    <fieldset class="left" data-width="50" data-cols="1" data-min="-100" data-max="100" data-mid="0" data-fgColor="#ff0000">
+      <input value="10">
+    </fieldset>
+
+    <fieldset class="right" data-width="50" data-cols="1" data-min="-100" data-max="100" data-mid="0" data-fgColor="#ff0000">
+      <input value="10">
+    </fieldset>
+
+    <div id="output"></div>
+    <script src="/javascripts/libs/jquery-1.8.0.min.js" type="text/javascript"></script>
+    <script src="/javascripts/libs/jquery.kontrol.js" type="text/javascript"></script>
+    <script src="/javascripts/libs/jquery.knob.js" type="text/javascript"></script>
+    <script type="text/javascript">
+
+      var ws = new WebSocket("ws://localhost:3000/");
+
+      ws.onopen = function () {
+        // Web Socket is connected, send data using send()
+        ws.send("Message to send");
+        console.log("Message to send");
+      };
+      ws.onmessage = function (evt) {
+        var received_msg = evt.data;
+        console.log("Message is received...");
+      };
+      ws.onclose = function () {
+        // websocket is closed.
+        alert("Connection is closed...");
+      };
+
+      $(function () {
+        $(".left").bars({
+            fgColor:"#222222"
+          , bgColor:"#00ff00"
+          , displayMidLine: true
+          , change: function (val) {
+              ws.send("left:" + val[0]);
+          }
+        });
+        $(".right").bars({
+            fgColor:"#222222"
+          , bgColor:"#00ff00"
+          , displayMidLine: true
+          , change: function (val) {
+              ws.send("right:" + val[0]);
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
