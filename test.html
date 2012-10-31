@@ -21,14 +21,14 @@
     <body>
 
       <div class="control left">
-        <fieldset data-width="50" data-cols="1" data-min="-122" data-max="122" data-mid="0" data-fgColor="#ff0000">
-          <input value="10">
+        <fieldset data-width="50" data-cols="1" data-min="-127" data-max="127" data-mid="0" data-fgColor="#ff0000">
+          <input value="0">
         </fieldset>
       </div>
 
       <div class="control right">
-        <fieldset data-width="50" data-cols="1" data-min="-122" data-max="122" data-mid="0" data-fgColor="#ff0000">
-          <input value="10">
+        <fieldset data-width="50" data-cols="1" data-min="-127" data-max="127" data-mid="0" data-fgColor="#ff0000">
+          <input value="0">
         </fieldset>
       </div>
 
@@ -36,7 +36,7 @@
       <script src="public/javascripts/libs/jquery.kontrol.js" type="text/javascript"></script>
       <script type="text/javascript">
 
-        var offsetValue = 122;
+        var offsetValue = 127;
 
         var ws = new WebSocket("ws://localhost:3000/");
         ws.onopen = function() {

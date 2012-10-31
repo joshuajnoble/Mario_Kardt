@@ -162,16 +162,16 @@ void loop()
     }
     
     //void motor_control(char motor, char direction, unsigned char speed)
-    if(left > 122) {
-      motor_control( MOTOR_A, FORWARD, left - 122);
+    if(left > 127) {
+      motor_control( MOTOR_A, FORWARD, left - 127);
     } else {
-      motor_control( MOTOR_A, REVERSE, 122 - left);
+      motor_control( MOTOR_A, REVERSE, 127 - left);
     }
     
-    if(right > 122) {
-      motor_control( MOTOR_B, FORWARD, right - 122);
+    if(right > 127) {
+      motor_control( MOTOR_B, FORWARD, right - 127);
     } else {
-      motor_control( MOTOR_B, REVERSE, 122 - right);
+      motor_control( MOTOR_B, REVERSE, 127 - right);
     }
     
 }
