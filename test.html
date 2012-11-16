@@ -2,11 +2,16 @@
 <html>
     <head>
         <title>Test</title>
+
+
+    <meta id="viewport" name="viewport" content ="width=device-width, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
     </head>
     <style type="text/css">
       .control {
         height: 200px;
-        width: 50px;
+        width: 200px;
+        margin-top: 50px;
       }
 
       .left {
@@ -21,13 +26,13 @@
     <body>
 
       <div class="control left">
-        <fieldset data-width="50" data-cols="1" data-min="-127" data-max="127" data-mid="0" data-fgColor="#ff0000">
+        <fieldset data-width="200" data-height="250" data-cols="1" data-min="-127" data-max="127" data-mid="0" data-fgColor="#ff0000">
           <input value="0">
         </fieldset>
       </div>
 
       <div class="control right">
-        <fieldset data-width="50" data-cols="1" data-min="-127" data-max="127" data-mid="0" data-fgColor="#ff0000">
+        <fieldset data-width="200" data-height="250" data-cols="1" data-min="-127" data-max="127" data-mid="0" data-fgColor="#ff0000">
           <input value="0">
         </fieldset>
       </div>
@@ -38,7 +43,7 @@
 
         var offsetValue = 127;
 
-        var ws = new WebSocket("ws://localhost:3000/");
+        var ws = new WebSocket("ws://10.118.73.111:3000/");
         ws.onopen = function() {
           console.log(" onopen ");
         };
@@ -64,6 +69,8 @@
             }
           });
         });
+
+        touchmove
 
       </script>
 

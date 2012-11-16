@@ -31,7 +31,11 @@ class WebSocketsHandler(SocketServer.StreamRequestHandler):
 
     def read_next_message(self):
         if self.hasSecKey:
-            length = ord(self.rfile.read(2)[1]) & 127
+            try:
+                length = ord(self.rfile.read(2)[1]) & 127
+            except IndexError:
+                self.server.removePair(self)
+
             if length == 126:
                 length = struct.unpack(">H", self.rfile.read(2))[0]
             elif length == 127:
@@ -129,37 +133,45 @@ class WSServer(ThreadingTCPServer):
     browserClients = []
     wiflyClients = []
     jointBrowserWifly = []
+    allow_reuse_address = True
 
     currentGameEvent = -1
     currentGameEventOwner = ""
 
     def handle_request(self):
-        print " handle request "
+        #print " handle request "
         handler = ThreadingTCPServer.handle_request(self)
         handler.set_handlers(self.handleWiFlyMessage, self.handleBrowserMessage)
         return handler
 
     def finish_request(self, *args, **kws):
-        print "process request"
+        #print "process request"
         handler = ThreadingTCPServer.finish_request(self, *args, **kws)
 
     def addWiFly(self, handler):
-        print "handleWiFlyMessage"
+        #print "handleWiFlyMessage"
         self.wiflyClients.append(handler)
         if(len(self.wiflyClients) > len(self.browserClients) and len(self.browserClients) > len(self.jointBrowserWifly)):
             joint = {'wifly':handler, 'browser':browserClients[len(browserClients)-1], 'cachedSpeed':[122, 122]}
             self.jointBrowserWifly.append(joint)
 
     def addBrowser(self, handler):
-        print "handleBrowserMessage"
+        #print "handleBrowserMessage"
         self.browserClients.append(handler)
         if(len(self.browserClients) > len(self.jointBrowserWifly) and len(self.wiflyClients) > len(self.jointBrowserWifly)):
             joint = {'wifly':self.wiflyClients[len(self.wiflyClients)-1], 'browser':handler, 'cachedSpeed':[122, 122]}
             self.jointBrowserWifly.append(joint)
 
+    def removePair(self, handler):
+        for joint in self.jointBrowserWifly:
+            if(joint['browser'] == handler or joint['wifly'] == handler):
+                jointBrowserWifly.remove(joint)
+                return
+
+
     def routeControlSignal(self, handler, message, side):
-        print "control signal"
-        print message
+        #print "control signal"
+        #print message
         for joint in self.jointBrowserWifly:
             if(joint['browser'] == handler):
                 #print "found handler " + str(handler.client_address)

@@ -34,7 +34,7 @@ WiFly wifly;
 const char mySSID[] = "frogwirelessext";
 const char myPassword[] = "friedolin";
 
-char server[] = "10.118.73.74";
+char server[] = "10.118.73.111";
 int port = 3000;
 
 //////////////////////////////////////////////////////////////////
@@ -114,7 +114,7 @@ char inBuf[9];
 char outBuf[128];
 uint8_t outBufInd = 0;
 
-uint16_t left, right;
+uint16_t left = 127, right = 127;
 
 void loop() 
 {
