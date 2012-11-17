@@ -58,14 +58,14 @@
 #define OFFSET_CLEAR 0x4B
 
 
-#include <SoftwareSerial.h> // need this to talk to the wifly shield.
+#include <AltSoftSerial.h> // need this to talk to the wifly shield.
 #include <WiFlyHQ.h> // wifly!
 #include <Wire.h> // i2c library to talk to the color sensor
 
 // ADJD-S311 Pin definitions:
 int sdaPin = 5;  // serial data, hardwired, can't change
 int sclPin = 6;  // serial clock, hardwired, can't change
-int ledPin = 2;  // LED light source pin, any unused pin will work
+int ledPin = 7;  // LED light source pin, any unused pin will work
 
 // initial values for integration time registers
 unsigned char colorCap[4] = {9, 9, 2, 5};  // values must be between 0 and 15
@@ -77,31 +77,25 @@ signed char colorOffset[4];  // Stores RGB and C offset values
 // WIFLY
 //////////////////////////////////////////////////////////////////
 
+#undef PROGMEM 
+#define PROGMEM __attribute__(( section(".progmem.data") )) 
+#undef PSTR 
+#define PSTR(s) (__extension__({static prog_char __c[] PROGMEM = (s); &__c[0];})) 
+
 bool hasGottenIDFromServer = false;
 
 // Teensy can do regular Serial, so we might just
 // want to swap it over, but we'll have to see
-SoftwareSerial wifiSerial(10,11);
+AltSoftSerial wifiSerial(10,11);
 
 // Change these to match your WiFi network
 const char mySSID[] = "frogwirelessext";
 const char myPassword[] = "friedolin";
 
-uint32_t lastSend = 0;
-uint32_t count=0;
-
 const int PORT = 3000;
-//const char IP[] = "192.168.1.60";
-const char IP[] = "10.118.73.86";
+const char IP[] = "10.118.73.72";
+long lastCheck;
 
-// this is the data packet
-// transmitted like so:
-// xx.xxx.xx.xxx:3000?id=THIS_ID&color=colorSensorVal
-// xx.xxx.xx.xxx:3000?id=THIS_ID&color=1
-int THIS_ID;
-int colorSensorVal;
-
-void terminal();
 WiFly wifly;
 
 //////////////////////////////////////////////////////////////////
@@ -124,7 +118,12 @@ const int *colors[] = { blue, red, yellow, orange, green, magenta, greenLined };
 //////////////////////////////////////////////////////////////////
 
 bool lastReqResponded = false;
-uint16_t left, right;
+
+char inBuf[9];
+char outBuf[128];
+uint8_t outBufInd = 0;
+
+uint16_t left = 127, right = 127;
 
 void setup()
 {
@@ -141,6 +140,8 @@ void setup()
   pinMode(BIN1,OUTPUT);
   pinMode(BIN2,OUTPUT);
   pinMode(STBY,OUTPUT);
+  
+  pinMode(ledPin, OUTPUT);
 
   char buf[32];
 
@@ -149,58 +150,37 @@ void setup()
   /////////////////////////////////////////////////////
 
   wifiSerial.begin(9600);
-
   if (!wifly.begin(&wifiSerial, &Serial)) {
-    Serial.println("Failed to start wifly");
-    terminal();
+    Serial.println(F("Failed to start wifly"));
+    wifly.terminal();
   }
 
-  if (wifly.getFlushTimeout() != 10) {
-    Serial.println("Restoring flush timeout to 10msecs");
-    wifly.setFlushTimeout(10);
-    wifly.save();
-    wifly.reboot();
-  }
-
-  // Join wifi network if not already associated
-  if (!wifly.isAssociated()) {
-    /* Setup the WiFly to connect to a wifi network */
-    Serial.println("Joining network");
-    wifly.setSSID(mySSID);
-    wifly.setPassphrase(myPassword);
-    wifly.enableDHCP();
-
-    if (wifly.join()) {
-      Serial.println("Joined wifi network");
-    } 
-    else {
-      Serial.println("Failed to join wifi network");
-      terminal();
-    }
+    /* Join wifi network if not already associated */
+    if (!wifly.isAssociated()) {
+  Serial.println(F("Joining network"));
+  if (wifly.join(mySSID, myPassword, true)) {
+      wifly.save();
+      Serial.println(F("Joined wifi network"));
   } else {
-    Serial.println("Already joined network");
+      Serial.println(F("Failed to join wifi network"));
+      wifly.terminal();
   }
+    } else {
+        Serial.println(F("Already joined network"));
+    }
 
-  /* Ping the gateway */
-  wifly.getGateway(buf, sizeof(buf));
+    if (!connect(IP, "", 3000)) {
+      Serial.print(F("Failed to connect to "));
+      Serial.println(IP);
+      wifly.terminal();
+    }
 
-  if (wifly.ping(buf)) {
-    Serial.println("ok");
-  } 
-  else {
-    Serial.println("failed");
-  }
-
-  // Setup for UDP packets, sent automatically
-  wifly.setIpProtocol(WIFLY_PROTOCOL_UDP);
-  // do we need device ID before setHost()?
-  //wifly.setHost(IP, PORT);	// Send UDP packet to this server and port
-  wifly.open(IP, PORT);
-  wifly.setDeviceID("Wifly-HTTP");
+    Serial.println(F("Sending Hello World"));
+    send("Hello, World!");
 
   ////////////////////////////////////////////////////
   // COLOR SENSOR
-
+  ////////////////////////////////////////////////////
   pinMode(ledPin, OUTPUT);  // Set the sensor's LED as output
   digitalWrite(ledPin, HIGH);  // Initially turn LED light source on
   
@@ -217,98 +197,79 @@ void setup()
   calibrateCapacitors();  // This calibrates the RGB, and C cap registers
   getRGBC();  // After calibrating, we can get the first RGB and C data readings
 
+  
+  motor_standby(false);        //Must set STBY pin to HIGH in order to move
+  digitalWrite(ledPin, HIGH);
+
 }
 
 
 //
 void loop()
 {
-  // check wifly
-  if(!hasGottenIDFromServer) {
-    wifly.print("id request");
-    
-    // just wait for this
-    while( wifly.available() < 0 ) {
-    }
-    
-    THIS_ID = wifly.read() - '0';
-    hasGottenIDFromServer = true;
-    
-  } else {
-    
-    // check the ADJD
-    getRGBC();
-    
-    int color = checkColors();
-    
-    if( color != -1 && !lastReqResponded ) {
-      wifly.print("id=");
-      wifly.print(THIS_ID);
-      wifly.print('&color=');
-      wifly.println(color);
-      lastReqResponded = false;
-    } else if( !lastReqResponded ) {
+  digitalWrite(ledPin, HIGH);
+  if (getMessage(inBuf, sizeof(inBuf)) > 0) {
       
-      wifly.print("id=");
-      wifly.print(THIS_ID);
-      lastReqResponded = false;
-    }
+    Serial.println(inBuf);
     
     char t[3];
     memset(t, 0x20, 3);
     
-    int ind;
-    
-    // wait for all 7 chars
-    if(wifly.available() > 7) {
-      lastReqResponded = true;
-
-      boolean leading = true;
-      int i = 0;
-      while( i < 3 ) {
-        char c = (char) wifly.read();
-        if(c != '0'){
-          leading = false;
-        }
-        if(!leading) {
-          t[i] = c;
-        }
-        i++;
+    boolean leading = true;
+    int i = 0;
+    while( i < 3 ) {
+      char c = (char) inBuf[i];
+      if(c != '0'){
+        leading = false;
       }
-      char sep = wifly.read(); // throw away
-      
-      left = (int) strtol(&t[0], NULL, 0);
-      leading = true;
-      
-      i = 0;
-      while( i < 3 ) {
-        char c = (char) wifly.read();
-        if(c != '0'){
-          leading = false;
-        }
-        if(!leading) {
-          t[i] = c;
-        }
-        i++;
+      if(!leading) {
+        t[i] = c;
       }
-      
-      right = (int) strtol(&t[0], NULL, 0);
+      i++;
     }
     
-    //void motor_control(char motor, char direction, unsigned char speed)
-    if(left > 255) {
-      motor_control( MOTOR_A, FORWARD, left - 255);
-    } else {
-      motor_control( MOTOR_A, REVERSE, 255 - left);
+    left = (int) strtol(&t[0], NULL, 0);
+    
+    memset(t, 0x20, 3);
+    leading = true;
+    
+    i = 4;
+    while( i < 7 ) {
+      char c = (char) inBuf[i];
+      if(c != '0'){
+        leading = false;
+      }
+      if(!leading) {
+        t[i-4] = c;
+      }
+      i++;
     }
     
-    if(right > 255) {
-      motor_control( MOTOR_B, FORWARD, right - 255);
-    } else {
-      motor_control( MOTOR_B, REVERSE, 255 - right);
-    }
+    right = (int) strtol(&t[0], NULL, 0);
     
+    Serial.println(left);
+    Serial.println(right);
   }
+    
+  //void motor_control(char motor, char direction, unsigned char speed)
+  if(left > 127) {
+    motor_control( MOTOR_A, FORWARD, left - 127);
+  } else {
+    motor_control( MOTOR_A, REVERSE, 127 - left);
+  }
+  
+  if(right > 127) {
+    motor_control( MOTOR_B, FORWARD, right - 127);
+  } else {
+    motor_control( MOTOR_B, REVERSE, 127 - right);
+  }
+
+  if(lastCheck - millis() > 100) {
+    lastCheck = millis();
+    getRGBC();
+    checkColors();
+  }
+
 }
 
 int checkColors()
@@ -334,72 +295,64 @@ int checkColors()
 // WIFLY
 //////////////////////////////////////////////////////////////////
 
-void terminal()
+int getMessage(char *buf, int size)
 {
-  Serial.println("Terminal ready");
-  while (1) {
+    int len = 0; 
+
     if (wifly.available() > 0) {
-      Serial.write(wifly.read());
+  if (wifly.read() == 0) {
+      /* read up to the end of the message (255) */
+      len = wifly.getsTerm(buf, size, 255);
+  }
+    }
+    return len;
+}
+
+void send(const char *data) 
+{
+    wifly.print((uint8_t)0);
+    wifly.print(data);
+    wifly.print((uint8_t)255);
+}
+
+bool connect(const char *hostname, const char *path, uint16_t port)
+{
+    if (!wifly.open(hostname, 3000)) {
+        Serial.println(F("connect: failed to open TCP connection"));
+  return false;
+    }
+    
+    wifly.println(F("GET / HTTP/1.1"));
+    wifly.println(F("Upgrade: WebSocket"));
+    wifly.println(F("Connection: Upgrade"));
+    wifly.print(F("Host: "));
+    wifly.print(hostname);
+    wifly.println(F("\r\n"));
+    wifly.println(F("Origin: 192.168.1.106"));
+    wifly.println(F("\r\n"));
+    
+    // Wait for the handshake response
+    if (wifly.match(F("HTTP/1.1 101"), 4000)) {
+      wifly.flushRx(200);
+      return true;
     }
 
-    if (Serial.available()) {
-      wifly.write(Serial.read());
-    }
-  }
+    Serial.println(F("connect: handshake failed"));
+    wifly.flushRx(200);
+    wifly.close();
+
+    return false;
 }
 
 //////////////////////////////////////////////////////////////////
 // Motor
 //////////////////////////////////////////////////////////////////
 
-
 //Turns off the outputs of the Motor Driver when true
 void motor_standby(char standby)
 {
   if (standby == true) digitalWrite(STBY,LOW);
   else digitalWrite(STBY,HIGH);
-}
-
-//Stops the motors from spinning and locks the wheels
-void motor_brake()
-{
-  digitalWrite(AIN1,1);
-  digitalWrite(AIN2,1);
-  digitalWrite(PWMA,LOW);
-  digitalWrite(BIN1,1);
-  digitalWrite(BIN2,1);
-  digitalWrite(PWMB,LOW);
-} 
-
-//Controls the direction the motors turn, speed from 0(off) to 255(full speed)
-void motor_drive(char direction, unsigned char speed)
-{
-  if (direction == FORWARD)
-  {
-    motor_control(MOTOR_A, FORWARD, speed);
-    motor_control(MOTOR_B, FORWARD, speed);
-  }
-  else
-  {
-    motor_control(MOTOR_A, REVERSE, speed);
-    motor_control(MOTOR_B, REVERSE, speed);
-  }
-}
-
-//You can control the turn radius by specifying the speed of each motor
-//Set both to 255 for it to spin in place
-void motor_turn(char direction, unsigned char speed_A, unsigned char speed_B )
-{
-  if (direction == RIGHT)
-  {
-    motor_control(MOTOR_A, REVERSE, speed_A);
-    motor_control(MOTOR_B, FORWARD, speed_B);
-  }
-  else
-  {
-    motor_control(MOTOR_A, FORWARD, speed_A);
-    motor_control(MOTOR_B, REVERSE, speed_B);
-  }
 }
 
 void motor_control(char motor, char direction, unsigned char speed)
@@ -620,6 +573,8 @@ void calibrateCapacitors()
     int bCal = calibrationBlue;
   }
   
+  Serial.println(" done calibrate cap ");
+  
 }
 
 /* writeInt() - This function writes a 12-bit value
@@ -680,21 +635,17 @@ void getOffset()
   digitalWrite(ledPin, HIGH);
 }
 
-/* I2C functions...*/
+////////////////////////////////////////////
+// I2C functions...
+////////////////////////////////////////////
+
 // Write a byte of data to a specific ADJD-S311 address
 void writeRegister(unsigned char data, unsigned char address)
 {
-  
-  Serial.println( " calling writeRegister ");
   Wire.beginTransmission(ADJD_S311_ADDRESS);
-  Serial.println( " beginTrans ");
   Wire.write(address);
-  Serial.println( " write(address) ");
   Wire.write(data);
-  Serial.println( " write(data) ");
-  
   Wire.endTransmission();
-  Serial.println( " leaving writeRegister ");
 }
 
 // read a byte of data from ADJD-S311 address
